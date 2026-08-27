@@ -14,6 +14,17 @@ length barely matters — **session length is almost the entire bill.** Measured
 over 61 real sessions: a turn at position 300 cost **3.9×** the same turn at
 position 25, and sessions over 300 turns consumed **70%** of 3.07bn tokens.
 
+## Installation & Setup
+
+**When installing or configuring this skill:**
+- Run `python install.py` from the skill root directory.
+- **Do NOT hand-edit `~/.claude/settings.json`.**
+- **Do NOT attempt exploratory configuration or create custom installer scripts.**
+- To preview changes safely: `python install.py --dry-run`
+- To remove: `python install.py --uninstall`
+
+The installer automatically backs up `settings.json`, verifies the updated file, and rolls back immediately if any error occurs.
+
 ## Config
 
 Per-project settings live in `.claude/efficiency.json`. If missing, run
