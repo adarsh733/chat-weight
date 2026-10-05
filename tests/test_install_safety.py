@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Safety and regression tests for token-diet installer (P0).
 
 Covers:
@@ -8,7 +8,10 @@ Covers:
 4. String statusLine -> converted to valid dict, previous value preserved in _tokenDietPreviousStatusLine.
 5. Idempotency -> running install multiple times produces no duplicate hook entries.
 6. Uninstall -> --uninstall restores pre-install state.
-7. Generated commands -> contain sys.executable, not bare python.
+7. Hook runs a real Python directly; a broken Python or old Claude Code is handled.
+8. Upgrade -> hooks from older token-diet versions are removed; look-alikes from other tools stay.
+9. A working status line someone already has is kept, unless they pass --statusline.
+10. Another tool's on_prompt.py / statusline.py is never treated as token-diet's.
 """
 import json
 import os
@@ -52,10 +55,8 @@ class TestInstallSafety(unittest.TestCase):
         self.assertIsInstance(data.get("statusLine"), dict)
         self.assertEqual(data["statusLine"].get("type"), "command")
         self.assertIn("statusline.py", data["statusLine"].get("command", ""))
-        self.assertIn("hooks", data)
-        self.assertIn("UserPromptSubmit", data["hooks"])
-        self.assertIn("SessionStart", data["hooks"])
-        self.assertIn("Stop", data["hooks"])
+        self.assertIn("on_prompt.py", json.dumps(data["hooks"]["UserPromptSubmit"]))
+        self.assertEqual(sorted(data["hooks"]), ["UserPromptSubmit"])
 
     def test_2_unrelated_keys_survive_intact(self):
         """2. settings.json with unrelated keys -> every one survives with identical values."""
@@ -90,7 +91,7 @@ class TestInstallSafety(unittest.TestCase):
         # Check existing custom hook in UserPromptSubmit was not destroyed
         ups_blob = json.dumps(data["hooks"]["UserPromptSubmit"])
         self.assertIn("company_policy_check.py", ups_blob)
-        self.assertIn("session_guard.py", ups_blob)
+        self.assertEqual(ups_blob.count("on_prompt.py"), 1)
 
     def test_3_malformed_json_aborts_without_modifying_file(self):
         """3. settings.json malformed JSON -> installer exits 1, file byte-identical."""
@@ -141,9 +142,7 @@ class TestInstallSafety(unittest.TestCase):
 
         blob = json.dumps(data)
         self.assertEqual(blob.count("statusline.py"), 1)
-        self.assertEqual(blob.count("session_guard.py"), 1)
-        self.assertEqual(blob.count("savings_note.py"), 1)
-        self.assertEqual(blob.count("usage_meter.py"), 1)
+        self.assertEqual(blob.count("on_prompt.py"), 1)
 
     def test_6_uninstall_restores_pre_install_state(self):
         """6. --uninstall -> returns file to its pre-install state."""
@@ -179,38 +178,121 @@ class TestInstallSafety(unittest.TestCase):
         self.assertEqual(uninstalled_data.get("model"), "sonnet")
         self.assertIn("UserPromptSubmit", uninstalled_data.get("hooks", {}))
         self.assertNotIn("SessionStart", uninstalled_data.get("hooks", {}))
+        self.assertEqual(uninstalled_data["hooks"]["UserPromptSubmit"], initial_config["hooks"]["UserPromptSubmit"])
         self.assertNotIn("Stop", uninstalled_data.get("hooks", {}))
 
         ups_blob = json.dumps(uninstalled_data["hooks"]["UserPromptSubmit"])
         self.assertIn("other_guard.py", ups_blob)
-        self.assertNotIn("session_guard.py", ups_blob)
+        self.assertNotIn("on_prompt.py", ups_blob)
 
-    def test_7_generated_commands_contain_sys_executable(self):
-        """7. Generated commands contain sys.executable, not bare python."""
+    def test_7_commands_name_a_real_python_and_need_no_shell(self):
+        """7. The hook starts a real Python directly (exec form); the status line is one
+        shell-safe line with forward slashes."""
         res = self._run_installer()
-        self.assertEqual(res.returncode, 0)
-
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         with open(self.settings_path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
+        hook = data["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+        self.assertTrue(os.path.isfile(hook["command"]), hook["command"])
+        self.assertNotIn("\\", hook["command"])
+        self.assertEqual(len(hook["args"]), 1)
+        self.assertTrue(hook["args"][0].endswith("hooks/on_prompt.py"))
+        status = data["statusLine"]["command"]
+        self.assertNotIn("\\", status)
+        self.assertFalse(status.startswith("python "))
+        self.assertTrue(status.rstrip('"').endswith("statusline.py"))
 
-        py_exe = sys.executable
-        self.assertIn(py_exe, data["statusLine"]["command"])
+    def test_7b_a_python_that_cannot_run_the_scripts_changes_nothing(self):
+        """7b. If the scripts fail to start, the installer stops before writing."""
+        os.makedirs(self.settings_dir, exist_ok=True)
+        with open(self.settings_path, "w", encoding="utf-8") as fh:
+            fh.write('{"model": "opus"}')
+        sys.path.insert(0, ROOT)
+        import install
+        problem = install.self_test(sys.executable, os.path.join(self.test_dir, "missing.py"),
+                                    os.path.join(ROOT, "scripts", "statusline.py"))
+        self.assertIn("missing.py", problem)
+        self.assertEqual(install.self_test(sys.executable, os.path.join(ROOT, "hooks", "on_prompt.py"),
+                                           os.path.join(ROOT, "scripts", "statusline.py")), "")
 
+    def test_7c_old_claude_code_gets_a_one_line_command(self):
+        """7c. Claude Code older than 2.1.139 has no exec form: one shell line instead."""
+        sys.path.insert(0, ROOT)
+        import install
+        h = install.hook_entry("C:/Py/python.exe", "C:/x/token-diet/hooks/on_prompt.py", False)
+        self.assertEqual(h["command"], "C:/Py/python.exe C:/x/token-diet/hooks/on_prompt.py")
+        self.assertNotIn("args", h)
+        self.assertTrue(install.is_ours(h))
+        self.assertTrue(install.is_ours(install.hook_entry("/usr/bin/python3",
+                                                           "/h/token-diet/hooks/on_prompt.py", True)))
+        self.assertFalse(install.is_ours({"command": "python3", "args": ["/h/mytools/on_prompt.py"]}))
+
+    def test_8_upgrade_removes_old_token_diet_hooks_only(self):
+        """8. Old token-diet entries go; a same-named script from another tool stays."""
+        os.makedirs(self.settings_dir, exist_ok=True)
+        old = "/home/x/.claude/skills/token-diet/hooks/"
+        with open(self.settings_path, "w", encoding="utf-8") as fh:
+            json.dump({"hooks": {
+                "UserPromptSubmit": [
+                    {"hooks": [{"type": "command", "command": "python " + old + "session_guard.py"}]},
+                    {"hooks": [{"type": "command", "command": "python /opt/other/session_guard.py"}]}],
+                "SessionStart": [{"matcher": "startup", "hooks": [
+                    {"type": "command", "command": "python " + old + "savings_note.py"}]}],
+                "Stop": [{"hooks": [{"type": "command", "command": "python " + old + "usage_meter.py"}]}],
+            }}, fh)
+        res = self._run_installer()
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        with open(self.settings_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        self.assertEqual(sorted(data["hooks"]), ["UserPromptSubmit"])
         blob = json.dumps(data["hooks"])
-        self.assertIn("session_guard.py", blob)
-        self.assertIn("savings_note.py", blob)
-        self.assertIn("usage_meter.py", blob)
+        self.assertIn("/opt/other/session_guard.py", blob)
+        self.assertNotIn("token-diet/hooks/session_guard.py", blob)
+        self.assertEqual(blob.count("on_prompt.py"), 1)
 
-        for event in ("UserPromptSubmit", "SessionStart", "Stop"):
-            for item in data["hooks"][event]:
-                if isinstance(item, dict):
-                    if "hooks" in item:
-                        for h in item["hooks"]:
-                            self.assertIn(py_exe, h.get("command", ""))
-                            self.assertFalse(h.get("command", "").startswith("python "))
-                    elif "command" in item:
-                        self.assertIn(py_exe, item.get("command", ""))
-                        self.assertFalse(item.get("command", "").startswith("python "))
+    def test_9_a_working_status_line_is_kept_unless_asked(self):
+        """9. Someone's working status line stays; --statusline takes over; uninstall gives it back."""
+        os.makedirs(self.settings_dir, exist_ok=True)
+        theirs = {"type": "command", "command": "npx ccstatusline", "padding": 0}
+        with open(self.settings_path, "w", encoding="utf-8") as fh:
+            json.dump({"statusLine": theirs}, fh)
+        res = self._run_installer()
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("--statusline", res.stdout)
+        with open(self.settings_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        self.assertEqual(data["statusLine"], theirs)
+        self.assertNotIn("_tokenDietPreviousStatusLine", data)
+        self.assertEqual(json.dumps(data["hooks"]).count("on_prompt.py"), 1)
+
+        self.assertEqual(self._run_installer("--statusline").returncode, 0)
+        with open(self.settings_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        self.assertIn("statusline.py", data["statusLine"]["command"])
+        self.assertEqual(data["_tokenDietPreviousStatusLine"], theirs)
+
+        self.assertEqual(self._run_installer("--uninstall").returncode, 0)
+        with open(self.settings_path, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), {"statusLine": theirs})
+
+    def test_10_same_named_scripts_from_other_tools_are_never_touched(self):
+        """10. Another tool's on_prompt.py hook and statusline.py survive install AND uninstall."""
+        os.makedirs(self.settings_dir, exist_ok=True)
+        before = {
+            "statusLine": {"type": "command", "command": "python ~/mytools/statusline.py"},
+            "hooks": {"UserPromptSubmit": [
+                {"hooks": [{"type": "command", "command": "python ~/mytools/on_prompt.py"}]}]},
+        }
+        with open(self.settings_path, "w", encoding="utf-8") as fh:
+            json.dump(before, fh)
+        self.assertEqual(self._run_installer().returncode, 0)
+        with open(self.settings_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        self.assertEqual(data["statusLine"], before["statusLine"])
+        self.assertIn("~/mytools/on_prompt.py", json.dumps(data["hooks"]))
+        self.assertEqual(self._run_installer("--uninstall").returncode, 0)
+        with open(self.settings_path, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), before)
 
 
 if __name__ == "__main__":

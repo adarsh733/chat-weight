@@ -1,146 +1,72 @@
-# Writing the carry-over note
+# Handoff — carry the work into a fresh chat
 
-When a chat runs out of room, the next chat starts from nothing. This note is the
-only thing that crosses the gap. Everything the next chat has to re-derive costs
-the user money and time, so a bad note is worse than no split at all.
+A long chat re-reads everything on every reply, so each reply costs more than the last.
+A handoff saves what matters in a short note, and a fresh chat picks up from there.
 
-**Assume the person reading it reads none of it.** They will paste it and type
-"go". It has to work anyway.
+## When
 
-Run `python scripts/handoff.py` first. It gathers the facts — files touched, what
-failed, what other windows have locked, how long this chat ran. You write the
-judgement; never guess a fact the script already knows.
+- Chat weight is past 60% — token-diet tells you — or
+- the user asks for one.
 
----
+Nothing else is a reason to write one.
 
-## Plain language is a hard rule
+## Rules
 
-The user is not a programmer, and this ships to strangers who are not either.
+1. **Never interrupt unfinished work.** An edit and the check that proves it are one step.
+   Finish the step you are on, start nothing new, and write the handoff at that safe break —
+   even if the whole run began from the chat's first message.
+2. **Two outputs:** a note saved on disk, and a 3-line paste block as the very last thing in
+   your reply. Do not print the note itself in chat.
+3. **The note** goes in `<project>/.claude/handoffs/YYYY-MM-DD-<short-topic>.md` and stays
+   under 4 KB. It points at files (`path:line`). It never copies their contents.
+4. **Facts only.** Say what is proven done and what is not started — no percentages.
+   Anything not checked is written as "not verified".
+5. **Pick the model for the next chat's work, not this one's:** top level for thinking, middle
+   for building a plan that is already agreed, small for routine work. Name tool, model and
+   effort together, using the model names token-diet gives you.
+6. **The paste block points, it never carries:** topic, absolute path to the note, where to
+   start plus tool · model · effort. Three lines, in a code block, so one tap copies it.
+7. If the project has its own additions (shown after these rules, under "this project's
+   additions"), follow them too.
 
-**Never write these words:** handoff, context, tokens, turns, compaction,
-threshold, ceiling.
+## The note
 
-Say *this chat is getting full*, *a fresh chat*, *your work carries over*.
-Write the way you would explain it to a friend who is good at their job and has
-never used a terminal.
+```
+▶ NEXT CHAT — SETUP
+Tool:   <tool>
+Model:  <model> (<top | middle | small> level)
+Effort: <High | Medium | Low>
+Why:    <one line: what kind of work comes next>
 
----
+# Handoff — <topic> · <YYYY-MM-DD>
 
-## The seven sections — in this order, all of them, every time
+## 1. State right now
+- Proven done: <what, and what proves it>
+- Not started: <what>
 
-Use these exact headings. A section with nothing in it gets `— none.`, never
-deletion: an empty section is information.
+## 2. What we did, and why
+- <change> — <why>. `file:line`
 
-```markdown
-# Where we got to — <topic> · <YYYY-MM-DD>
+## 3. Decisions — do not reopen
+- <decision> — <one-line reason>
 
-## 1. What this chat was doing
-<One sentence. Not two.>
+## 4. Next actions, in order
+1. <action> — <how the next chat knows it is done>
 
-## 2. What is finished
-<Bulleted. Each line names the thing and the file it lives in. The next chat must
-never redo any of this, so anything half-true belongs in section 3, not here.>
+## 5. Do not do
+- <dead end already tried, and why it failed>
 
-## 3. What is half-done, and exactly where it stopped
-<For each: the file, the line, what the last attempt was, and what it did. If
-nothing is half-done, say so — that is a good outcome, not a gap.>
-
-## 4. Open these files, and nothing else
-<Scoped to the NEXT job, not the last one. See the rule below — this is the
-section that decides whether the note works. Each file gets one clause saying
-why. Never "read the docs". Never a folder. If a file only matters for one
-function, give the line range.>
-
-## 5. Do NOT do these
-<Traps. Approaches already tried that failed, and what happened. Standing
-constraints that are easy to break by accident. Do not paste the lock list here
-— see the rule below.>
-
-## 6. What is proven, and what is only assumed
-**Proven:** <what was actually run or seen, and how>
-**Assumed:** <what looks right but nobody checked>
-<Never let an assumption sit in section 2 dressed as a fact.>
-
-## 7. Do this first
-<One instruction, written as an instruction. This is the line the next chat acts
-on before anything else.>
+## 6. Open questions for the user
+- <question> — recommend: <answer>
 ```
 
----
+The setup block comes first: the user picks the model before opening the next chat.
+An empty section says `— none.` rather than disappearing.
 
-## The rule section 4 lives or dies by
+## The paste block — last thing in the reply
 
-**Section 4 lists what the NEXT job needs. Not what the last job touched.**
-
-This is the single thing that decides whether a note is worth writing. It was
-tested: a note whose section 4 listed the six files the previous chat had built
-scored **4 out of 10**, because the reader had to open nine files it never named
-— and one of them held most of the feature they had just been told to build from
-scratch.
-
-The two lists barely overlap. Files you finished are finished; naming them
-invites someone to re-read work that is already done. So before you write
-section 4:
-
-1. **Read the next task.** Whatever names it — a brief, a ticket, a list — open
-   that first, and quote the item.
-2. **Go looking for what already exists.** Search the codebase for the thing the
-   next task describes. Half-built helpers are the expensive thing to miss.
-   Name them with line numbers: *"`scripts/diet.py:166` already writes this
-   sentence; the job is only the trigger."*
-3. **Name what does NOT exist yet**, if the next task assumes it does. *"There is
-   no SessionStart hook; that script has to be created."* One line here saves an
-   hour of confused searching.
-4. **Then** add the few finished files worth keeping open, and say plainly that
-   they are finished: *"working, do not open unless something breaks."*
-
-**Never write "items 3 to 9 are untouched" unless you checked.** Saying a thing
-is unbuilt when it is half-built is the most expensive sentence a note can hold.
-
-## Locks are a snapshot — never copy them in
-
-Do not paste the current lock list into the note. It goes stale in minutes: in
-testing, two of the locked files had been released before the note was even read,
-and a new lock had appeared on the very folder the note told the reader to write
-into.
-
-Write this instead, and nothing more:
-
-> Before writing any file, read `.claude/ACTIVE-WORK.md` and check your list
-> against it. It changes while you work. <If a lock is yours and still open, say
-> so and say whether the next chat inherits it or files a fresh one.>
-
-## What makes one good
-
-- **Facts, not mood.** "We made great progress" tells the next chat nothing.
-  "The bar renders; the installer is untested" tells it everything.
-- **Name files, not areas.** `js/week.js:120-180`, not "the calendar code".
-- **Every failure earns its place in section 5.** A failed attempt that is not
-  written down will be repeated, at full price.
-- **Section 6 is the honesty section.** If you did not see it work, it is
-  assumed. Saying "unverified" costs one line; a wrong claim costs a whole chat.
-- **One page.** If it is longer, sections 2 and 4 are padded — cut them.
-
-## What makes one bad
-
-- Pointing at documentation instead of naming the file and the reason.
-- Listing every file touched instead of the few that matter next.
-- Burying the actual next action at the bottom of a wall of prose.
-- Claiming something works because it was written, not because it was run.
-
----
-
-## Where it goes
-
-1. Print it in the chat as one copy-pasteable block.
-2. Save it to `.claude/handoffs/YYYY-MM-DD-<slug>.md`.
-3. **Release any file locks first.** A note that leaves a lock open deadlocks the
-   next window. `handoff.py` prints the open locks — clear your own before you
-   finish.
-
-## The test it has to pass
-
-Paste it into a genuinely fresh chat, with nothing else. The chat must continue
-correctly **without opening a single file the note does not name.**
-
-If it cannot, the note failed. That is the whole bar.
+```
+Continuing: <one sentence: the topic>
+Note: <absolute path to the note>
+Read that note and start at section 4, item 1. <Tool> · <model> · <effort>.
+```

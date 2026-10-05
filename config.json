@@ -1,0 +1,39 @@
+{
+  "_read_me": "Defaults. Don't edit this file — copy any key you want to change into ~/.claude/token-diet/config.json (all your projects) or <project>/.claude/token-diet.json (one project). Those win over this file.",
+
+  "_weight_why": "Chat weight = how much the chat has grown since its first reply, against the point where starting fresh is cheaper. That point is restart_multiple x the restart cost (what a fresh chat must re-load to carry on, learned from your own fresh chats; restart_tokens_default until there are 3 of them), but never past memory_cap_pct of the model's memory. The bar reads fresh_chat_pct there.",
+  "wrap_up_pct": 40,
+  "fresh_chat_pct": 60,
+  "restart_multiple": 4,
+  "restart_tokens_default": 30000,
+  "memory_cap_pct": 70,
+  "handoff_folder": ".claude/handoffs",
+  "handoff_extra": ".claude/handoff-extra.md",
+  "_paths_why": "Both paths are relative to the project folder (the nearest one holding .git or .claude). \"../\" steps out of it, so a sub-project can share its parent's notes and rules.",
+
+  "_windows_why": "How much each model can hold, by model-id prefix, used only for the memory_cap_pct limit. The status line reads the real number from Claude Code and that wins; this table is the fallback (the desktop app has no status line). Longest matching prefix wins, so a model released after this file (say claude-opus-7) falls under its family line and needs no update.",
+  "context_windows": {
+    "claude-opus": 1000000,
+    "claude-sonnet": 1000000,
+    "claude-fable": 1000000,
+    "claude-haiku": 200000,
+    "claude-opus-4": 200000,
+    "claude-opus-4-8": 1000000,
+    "claude-sonnet-4": 200000,
+    "claude-3": 200000,
+    "default": 200000
+  },
+
+  "models": {
+    "checked": "2026-10-01",
+    "levels": {
+      "top":    {"for": "thinking: planning, design, debugging, reviewing", "effort": "High"},
+      "middle": {"for": "building a plan that is already agreed",            "effort": "Medium"},
+      "small":  {"for": "routine: renaming, moving files, docs, running tests", "effort": "Low"}
+    },
+    "tools": {
+      "Claude Code": {"top": "opus", "middle": "sonnet", "small": "haiku", "names_stay_current": true}
+    },
+    "_add_a_tool": "To add another tool, add a line like  \"Codex\": {\"top\": \"<model>\", \"middle\": \"<model>\", \"small\": \"<model>\"}  and update \"checked\". Names in a tool without names_stay_current get '(or newer)' added once 'checked' is over 90 days old."
+  }
+}

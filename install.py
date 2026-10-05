@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Installer for token-diet.
 
-Configures Claude settings to wire up status line and hooks safely.
+Adds two things to ~/.claude/settings.json: the status line and one hook that runs
+when you send a message. Backs the file up first, touches nothing else, checks the
+result and puts the backup back if anything is wrong.
+
+    python install.py             install (or upgrade)
+    python install.py --dry-run   show the change, write nothing
+    python install.py --uninstall remove token-diet, restore your old status line
+    python install.py --statusline  use token-diet's status line even if you have one
 """
 import argparse
 import copy
@@ -69,45 +76,111 @@ def save_settings(path, data):
         fh.write("\n")
 
 
-def update_hook_list(hook_list, script_name, hook_entry_builder):
-    """Ensure a hook referencing script_name exists in hook_list exactly once, updating if present."""
-    found = False
-    for item in hook_list:
-        if isinstance(item, dict):
-            inner_hooks = item.get("hooks", [])
-            for h in inner_hooks:
-                if isinstance(h, dict) and script_name in h.get("command", ""):
-                    found = True
-                    h["command"] = hook_entry_builder()["hooks"][0]["command"]
-                    break
-            if not found and script_name in item.get("command", ""):
-                found = True
-                item["command"] = hook_entry_builder()["hooks"][0]["command"]
+OURS = ("on_prompt.py",)
+OLD = ("session_guard.py", "usage_meter.py", "savings_note.py")  # earlier token-diet versions
+
+
+def _from_us(command):
+    """True when a command runs a script from a token-diet folder. A script name alone is
+    not proof: other tools ship their own on_prompt.py and statusline.py."""
+    command = str(command or "").replace("\\", "/").lower()
+    return "token-diet" in command or ROOT.replace("\\", "/").lower() in command
+
+
+def hook_text(h):
+    """Everything a hook entry runs, whether written as one command line or as
+    command + args (exec form)."""
+    if not isinstance(h, dict):
+        return ""
+    args = h.get("args") if isinstance(h.get("args"), list) else []
+    return " ".join(str(x) for x in [h.get("command") or ""] + args)
+
+
+def is_ours(h):
+    """A hook entry that belongs to token-diet: this version, or an older one being upgraded."""
+    text = hook_text(h)
+    return _from_us(text) and any(s in text for s in OURS + OLD)
+
+
+# ------------------------------------------------------------ running Python
+
+ARGS_SINCE = (2, 1, 139)    # first Claude Code that runs hooks in exec form (no shell)
+
+
+def pick_python():
+    """The Python running this installer, as a path Claude Code can start.
+
+    The Microsoft Store Python reports a path inside "C:/Program Files/WindowsApps",
+    which other programs may not be allowed to start; its user-level shortcut in
+    AppData works everywhere, so that is used when it exists."""
+    exe = sys.executable
+    if os.name == "nt" and "\\program files\\windowsapps\\" in exe.lower():
+        apps = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WindowsApps")
+        for name in ("python%d.%d.exe" % sys.version_info[:2], "python3.exe", "python.exe"):
+            if os.path.isfile(os.path.join(apps, name)):
+                exe = os.path.join(apps, name)
                 break
-        if found:
-            break
-
-    if not found:
-        hook_list.append(hook_entry_builder())
+    return exe.replace("\\", "/")      # forward slashes: Git Bash eats backslashes
 
 
-def remove_hook_from_list(hook_list, script_name):
-    """Remove any hook entries that reference script_name."""
-    indices_to_remove = []
-    for idx, item in enumerate(hook_list):
-        if isinstance(item, dict):
-            if "hooks" in item and isinstance(item["hooks"], list):
-                item["hooks"] = [
-                    h for h in item["hooks"]
-                    if not (isinstance(h, dict) and script_name in h.get("command", ""))
-                ]
-                if len(item["hooks"]) == 0:
-                    indices_to_remove.append(idx)
-            elif script_name in item.get("command", ""):
-                indices_to_remove.append(idx)
+def no_spaces(path):
+    """On Windows, the space-free short form of a path when one exists, so one command
+    line works the same in Git Bash, PowerShell and cmd. Elsewhere, unchanged."""
+    if os.name != "nt" or " " not in path:
+        return path
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(1024)
+        if ctypes.windll.kernel32.GetShortPathNameW(path, buf, 1024):
+            return buf.value.replace("\\", "/")
+    except Exception:
+        pass
+    return path
 
-    for idx in reversed(indices_to_remove):
-        hook_list.pop(idx)
+
+def command_line(python_bin, script):
+    """One line any shell can run: bare paths when they have no spaces, quoted otherwise."""
+    parts = [no_spaces(python_bin), no_spaces(script)]
+    return " ".join(('"%s"' % x) if " " in x else x for x in parts)
+
+
+def claude_runs_exec_form():
+    """True unless the installed Claude Code is older than ARGS_SINCE. If Claude Code
+    can't be found from here, assume a current one."""
+    try:
+        import re
+        import subprocess
+        out = subprocess.run("claude --version", shell=True, capture_output=True,
+                             text=True, timeout=20).stdout
+        m = re.search(r"(\d+)\.(\d+)\.(\d+)", out or "")
+        return not m or tuple(int(x) for x in m.groups()) >= ARGS_SINCE
+    except Exception:
+        return True
+
+
+def hook_entry(python_bin, prompt_script, exec_form):
+    if exec_form:   # no shell at all: spaces, quotes and PowerShell can't break it
+        return {"type": "command", "command": python_bin, "args": [prompt_script], "timeout": 10}
+    return {"type": "command", "command": command_line(python_bin, prompt_script), "timeout": 10}
+
+
+def self_test(python_bin, prompt_script, statusline_script):
+    """Start both scripts the way Claude Code will, before anything is written."""
+    import subprocess
+    for script in (prompt_script, statusline_script):
+        try:
+            r = subprocess.run([python_bin, script], input=b"{}", capture_output=True, timeout=30)
+            if r.returncode != 0:
+                return "%s exited with %d: %s" % (os.path.basename(script), r.returncode,
+                                                  r.stderr.decode("utf-8", "replace")[:300])
+        except Exception as err:
+            return "could not start %s with %s: %s" % (os.path.basename(script), python_bin, err)
+    return ""
+
+
+def is_our_statusline(value):
+    return isinstance(value, dict) and "statusline.py" in str(value.get("command") or "") \
+        and _from_us(value.get("command"))
 
 
 def extract_unrelated_state(data):
@@ -119,26 +192,21 @@ def extract_unrelated_state(data):
     unrelated_hooks = {}
     if "hooks" in data and isinstance(data["hooks"], dict):
         for event, hook_items in data["hooks"].items():
-            if event not in ("UserPromptSubmit", "SessionStart", "Stop"):
+            if not isinstance(hook_items, list):
                 unrelated_hooks[event] = copy.deepcopy(hook_items)
-            elif isinstance(hook_items, list):
-                filtered = []
-                for item in hook_items:
-                    item_copy = copy.deepcopy(item)
-                    if isinstance(item_copy, dict):
-                        if "hooks" in item_copy and isinstance(item_copy["hooks"], list):
-                            item_copy["hooks"] = [
-                                h for h in item_copy["hooks"]
-                                if not (isinstance(h, dict) and any(
-                                    s in h.get("command", "") for s in ("session_guard.py", "savings_note.py", "usage_meter.py")
-                                ))
-                            ]
-                            if len(item_copy["hooks"]) > 0:
-                                filtered.append(item_copy)
-                        elif not any(s in item_copy.get("command", "") for s in ("session_guard.py", "savings_note.py", "usage_meter.py")):
-                            filtered.append(item_copy)
-                if filtered:
-                    unrelated_hooks[event] = filtered
+                continue
+            filtered = []
+            for item in hook_items:
+                item_copy = copy.deepcopy(item)
+                if isinstance(item_copy, dict) and isinstance(item_copy.get("hooks"), list):
+                    item_copy["hooks"] = [h for h in item_copy["hooks"]
+                                          if not is_ours(h)]
+                    if item_copy["hooks"]:
+                        filtered.append(item_copy)
+                elif not is_ours(item_copy):
+                    filtered.append(item_copy)
+            if filtered:
+                unrelated_hooks[event] = filtered
     return unrelated_top, unrelated_hooks
 
 
@@ -171,135 +239,82 @@ def verify_written_file(path, unrelated_top, unrelated_hooks, is_uninstall=False
     return True
 
 
-def apply_install(data, python_bin, statusline_script, session_guard_script, savings_note_script, usage_meter_script):
-    # 1. statusLine
-    statusline_cmd = f'"{python_bin}" "{statusline_script}"'
-    existing_status = data.get("statusLine")
-    if existing_status is not None:
-        is_our_dict = (
-            isinstance(existing_status, dict)
-            and "statusline.py" in existing_status.get("command", "")
-        )
-        if not is_our_dict:
-            print("Found existing statusLine configuration. Preserved it under '_tokenDietPreviousStatusLine'.")
-            data["_tokenDietPreviousStatusLine"] = existing_status
+def strip_ours(data):
+    """Remove every token-diet hook entry (this version and older ones); drop empty events."""
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return
+    for event in list(hooks):
+        items = hooks[event]
+        if not isinstance(items, list):
+            continue
+        kept = []
+        for item in items:
+            if isinstance(item, dict) and isinstance(item.get("hooks"), list):
+                item["hooks"] = [h for h in item["hooks"] if not is_ours(h)]
+                if item["hooks"]:
+                    kept.append(item)
+            elif not is_ours(item):
+                kept.append(item)
+        hooks[event] = kept
+        if not kept:
+            del hooks[event]
+    if not hooks:
+        del data["hooks"]
 
-    data["statusLine"] = {
-        "type": "command",
-        "command": statusline_cmd
-    }
 
-    # 2. hooks
-    if "hooks" not in data or not isinstance(data["hooks"], dict):
+def apply_install(data, python_bin, statusline_script, prompt_script, take_statusline=False,
+                  exec_form=True):
+    # 1. statusLine. A working one that belongs to someone else stays, unless the user
+    #    asks for ours (--statusline); the bar still shows at the end of every reply.
+    statusline_cmd = command_line(python_bin, statusline_script)
+    existing = data.get("statusLine")
+    theirs_works = isinstance(existing, dict) and bool(existing.get("command")) \
+        and not is_our_statusline(existing)
+    if is_our_statusline(existing):
+        existing["type"] = "command"
+        existing["command"] = statusline_cmd
+    elif theirs_works and not take_statusline:
+        print("You already have a status line, so it stays as it is. The chat-weight bar")
+        print("still shows at the end of every reply. To show it in the status line instead,")
+        print("run: python install.py --statusline")
+    else:
+        if existing is not None:
+            print("Saved your old status line under '_tokenDietPreviousStatusLine'; "
+                  "--uninstall puts it back.")
+            data["_tokenDietPreviousStatusLine"] = existing
+        data["statusLine"] = {"type": "command", "command": statusline_cmd}
+
+    # 2. one hook, on every message the user sends
+    strip_ours(data)
+    if not isinstance(data.get("hooks"), dict):
         data["hooks"] = {}
-
-    # UserPromptSubmit -> session_guard.py
-    ups_list = data["hooks"].setdefault("UserPromptSubmit", [])
-    if not isinstance(ups_list, list):
-        ups_list = []
-        data["hooks"]["UserPromptSubmit"] = ups_list
-
-    guard_cmd = f'"{python_bin}" "{session_guard_script}"'
-    update_hook_list(
-        ups_list,
-        "session_guard.py",
-        lambda: {
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": guard_cmd,
-                    "timeout": 10
-                }
-            ]
-        }
-    )
-
-    # SessionStart -> savings_note.py
-    ss_list = data["hooks"].setdefault("SessionStart", [])
-    if not isinstance(ss_list, list):
-        ss_list = []
-        data["hooks"]["SessionStart"] = ss_list
-
-    savings_cmd = f'"{python_bin}" "{savings_note_script}"'
-    update_hook_list(
-        ss_list,
-        "savings_note.py",
-        lambda: {
-            "matcher": "startup",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": savings_cmd,
-                    "timeout": 10
-                }
-            ]
-        }
-    )
-
-    # Stop -> usage_meter.py
-    stop_list = data["hooks"].setdefault("Stop", [])
-    if not isinstance(stop_list, list):
-        stop_list = []
-        data["hooks"]["Stop"] = stop_list
-
-    meter_cmd = f'"{python_bin}" "{usage_meter_script}"'
-    update_hook_list(
-        stop_list,
-        "usage_meter.py",
-        lambda: {
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": meter_cmd,
-                    "timeout": 10
-                }
-            ]
-        }
-    )
+    ups = data["hooks"].setdefault("UserPromptSubmit", [])
+    ups.append({"hooks": [hook_entry(python_bin, prompt_script, exec_form)]})
 
 
 def apply_uninstall(data):
-    # 1. statusLine
     if "_tokenDietPreviousStatusLine" in data:
         data["statusLine"] = data.pop("_tokenDietPreviousStatusLine")
         print("Restored previous statusLine configuration.")
-    elif isinstance(data.get("statusLine"), dict) and "statusline.py" in data["statusLine"].get("command", ""):
+    elif is_our_statusline(data.get("statusLine")):
         del data["statusLine"]
         print("Removed token-diet statusLine.")
-
-    # 2. hooks
-    if "hooks" in data and isinstance(data["hooks"], dict):
-        if "UserPromptSubmit" in data["hooks"] and isinstance(data["hooks"]["UserPromptSubmit"], list):
-            remove_hook_from_list(data["hooks"]["UserPromptSubmit"], "session_guard.py")
-            if len(data["hooks"]["UserPromptSubmit"]) == 0:
-                del data["hooks"]["UserPromptSubmit"]
-
-        if "SessionStart" in data["hooks"] and isinstance(data["hooks"]["SessionStart"], list):
-            remove_hook_from_list(data["hooks"]["SessionStart"], "savings_note.py")
-            if len(data["hooks"]["SessionStart"]) == 0:
-                del data["hooks"]["SessionStart"]
-
-        if "Stop" in data["hooks"] and isinstance(data["hooks"]["Stop"], list):
-            remove_hook_from_list(data["hooks"]["Stop"], "usage_meter.py")
-            if len(data["hooks"]["Stop"]) == 0:
-                del data["hooks"]["Stop"]
-
-        if len(data["hooks"]) == 0:
-            del data["hooks"]
+    strip_ours(data)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Installer and manager for token-diet.")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without modifying settings.json")
     parser.add_argument("--uninstall", action="store_true", help="Remove token-diet from settings.json")
+    parser.add_argument("--statusline", action="store_true",
+                        help="Show the bar in the status line even if you already have one (yours is kept for --uninstall)")
     args = parser.parse_args()
 
     settings_path = get_settings_path()
-    python_bin = sys.executable
+    python_bin = pick_python()
     statusline_script = os.path.normpath(os.path.join(ROOT, "scripts", "statusline.py")).replace("\\", "/")
-    session_guard_script = os.path.normpath(os.path.join(ROOT, "hooks", "session_guard.py")).replace("\\", "/")
-    savings_note_script = os.path.normpath(os.path.join(ROOT, "hooks", "savings_note.py")).replace("\\", "/")
-    usage_meter_script = os.path.normpath(os.path.join(ROOT, "hooks", "usage_meter.py")).replace("\\", "/")
+    prompt_script = os.path.normpath(os.path.join(ROOT, "hooks", "on_prompt.py")).replace("\\", "/")
 
     if args.uninstall and not os.path.exists(settings_path):
         print(f"No settings file found at {settings_path}. Nothing to uninstall.")
@@ -312,7 +327,14 @@ def main():
     if args.uninstall:
         apply_uninstall(working_data)
     else:
-        apply_install(working_data, python_bin, statusline_script, session_guard_script, savings_note_script, usage_meter_script)
+        problem = self_test(python_bin, prompt_script, statusline_script)
+        if problem:
+            print("Stopped before changing anything: token-diet's scripts did not run.")
+            print("Details: " + problem)
+            print("Nothing was changed. Try running install.py with another Python 3.8+.")
+            sys.exit(1)
+        apply_install(working_data, python_bin, statusline_script, prompt_script,
+                      args.statusline, claude_runs_exec_form())
 
     assert_unrelated_intact(working_data, unrelated_top, unrelated_hooks)
 
@@ -339,7 +361,10 @@ def main():
         verify_written_file(settings_path, unrelated_top, unrelated_hooks, is_uninstall=args.uninstall)
     except Exception as err:
         print(f"Error during verification: {err}")
-        restore_backup(backup_path, settings_path)
+        if backup_path:
+            restore_backup(backup_path, settings_path)
+        elif not original_data and os.path.isfile(settings_path):
+            os.remove(settings_path)        # there was no settings file before us
         print("Install rolled back — your settings are unchanged.")
         sys.exit(1)
 
@@ -347,11 +372,9 @@ def main():
         print("Uninstall complete. Token Diet has been removed from your settings.")
         print(f"Updated configuration in: {settings_path}")
     else:
-        print("Setup complete.")
-        print(f"Configured status line -> {statusline_script}")
-        print(f"Configured prompt reminder -> {session_guard_script}")
-        print(f"Configured startup summary -> {savings_note_script}")
-        print(f"Configured usage meter -> {usage_meter_script}")
+        print("Setup complete. Start a new Claude Code chat and the chat-weight bar appears at the")
+        print("end of each reply. At 60% weight, Claude writes a handoff note and gives you three")
+        print("lines to paste into a fresh chat.")
         print(f"Updated configuration in: {settings_path}")
 
 
