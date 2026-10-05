@@ -1,11 +1,11 @@
 ---
-name: token-diet
+name: chat-weight
 description: Keeps Claude Code chats short and cheap. Shows the chat's weight after every reply, and at 60% writes a handoff note so the work continues in a fresh chat. Use when the user asks for a handoff, a fresh or new chat, chat weight, how heavy or long the chat is, where their tokens or usage went, or why they hit their limit.
 ---
 
-# token-diet
+# chat-weight
 
-Long chats are expensive because every reply re-reads the whole chat. token-diet keeps
+Long chats are expensive because every reply re-reads the whole chat. chat-weight keeps
 them short:
 
 - **Chat weight.** Every reply ends with a line like
@@ -25,7 +25,7 @@ them short:
 | "write a handoff", "new chat", "continue in a fresh chat" | Follow `reference/handoff.md` now, at any fullness |
 | "where did my tokens go", "why did I hit my limit", "audit my usage" | Run `python <this folder>/scripts/audit.py` (add `--all` for every project) and explain the result in plain words |
 | "how heavy is this chat" | Read the last bar line; no need to run anything |
-| "hand off later / sooner" or other settings | Put the key in `~/.claude/token-diet/config.json` (all projects) or `<project>/.claude/token-diet.json` (one project). Never edit this folder's `config.json` |
+| "hand off later / sooner" or other settings | Put the key in `~/.claude/chat-weight/config.json` (all projects) or `<project>/.claude/chat-weight.json` (one project). Never edit this folder's `config.json` |
 
 ## Model names in a handoff
 

@@ -13,7 +13,7 @@ PERSONAL = re.compile(r"adarsh|war-mode|war mode|health & medicine|adi20|antigra
                       r"active-work|worklog|boot\.md|one-go|[a-z]:[\\/]users", re.I)
 
 
-REPO = "github.com/adarsh733/token-diet"   # the project's own address is fine
+REPO = "github.com/adarsh733/chat-weight"   # the project's own address is fine
 
 
 def shipped():

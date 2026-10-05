@@ -1,5 +1,5 @@
 {
-  "_read_me": "Defaults. Don't edit this file — copy any key you want to change into ~/.claude/token-diet/config.json (all your projects) or <project>/.claude/token-diet.json (one project). Those win over this file.",
+  "_read_me": "Defaults. Don't edit this file — copy any key you want to change into ~/.claude/chat-weight/config.json (all your projects) or <project>/.claude/chat-weight.json (one project). Those win over this file.",
 
   "_weight_why": "Chat weight = how much the chat has grown since its first reply, against the point where starting fresh is cheaper. That point is restart_multiple x the restart cost (what a fresh chat must re-load to carry on, learned from your own fresh chats; restart_tokens_default until there are 3 of them), but never past memory_cap_pct of the model's memory. The bar reads fresh_chat_pct there.",
   "wrap_up_pct": 40,

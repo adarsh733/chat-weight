@@ -5,7 +5,7 @@ A handoff saves what matters in a short note, and a fresh chat picks up from the
 
 ## When
 
-- Chat weight is past 60% — token-diet tells you — or
+- Chat weight is past 60% — chat-weight tells you — or
 - the user asks for one.
 
 Nothing else is a reason to write one.
@@ -23,7 +23,7 @@ Nothing else is a reason to write one.
    Anything not checked is written as "not verified".
 5. **Pick the model for the next chat's work, not this one's:** top level for thinking, middle
    for building a plan that is already agreed, small for routine work. Name tool, model and
-   effort together, using the model names token-diet gives you.
+   effort together, using the model names chat-weight gives you.
 6. **The paste block points, it never carries:** topic, absolute path to the note, where to
    start plus tool · model · effort. Three lines, in a code block, so one tap copies it.
 7. If the project has its own additions (shown after these rules, under "this project's

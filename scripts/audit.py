@@ -68,9 +68,9 @@ def read_chat(path):
 
 
 def with_fresh_chats(chat, cfg):
-    """Same chat, re-priced under token-diet's own rule. An estimate, not a bill.
+    """Same chat, re-priced under chat-weight's own rule. An estimate, not a bill.
 
-    A fresh chat is only started where token-diet can act: when the person sends
+    A fresh chat is only started where chat-weight can act: when the person sends
     a message, once growth has passed the fresh-chat point. The fresh chat starts
     at the old start plus the restart cost, and re-loading that is counted twice
     because it is not yet cached. Returns (tokens, fresh chats started).
@@ -130,7 +130,7 @@ def main(argv):
     first = sum(by_depth[0]) / len(by_depth[0])
 
     print("")
-    print("  TOKEN DIET — where your tokens went (%s)" % ("all projects" if scope_all else "this project"))
+    print("  CHAT WEIGHT — where your tokens went (%s)" % ("all projects" if scope_all else "this project"))
     print("  " + "-" * 58)
     print("  Chats %d · replies %s · tokens %s" % (len(chats), format(replies, ","), human(total)))
     print("  Written by the AI      %5.1f%%" % (100.0 * out / total))
@@ -144,7 +144,7 @@ def main(argv):
     print("")
     print("  Your biggest %d chat%s used %.0f%% of everything." % (top_n, "" if top_n == 1 else "s", 100 * top_share))
     if lean < total:
-        print("  With token-diet's fresh chats (%d extra), the same work would have cost about"
+        print("  With chat-weight's fresh chats (%d extra), the same work would have cost about"
               % fresh)
         print("  %.0f%% less (%s). An estimate: it counts re-loading each fresh chat twice."
               % (100.0 * (total - lean) / total, human(total - lean)))

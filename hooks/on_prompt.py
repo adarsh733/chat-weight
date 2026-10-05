@@ -25,16 +25,16 @@ import td_common  # noqa: E402
 RULES = os.path.join(SKILL, "reference", "handoff.md")
 EXTRA_MAX = 4000
 
-BAR = ("[token-diet] End your reply with this exact line, on its own line, after all "
+BAR = ("[chat-weight] End your reply with this exact line, on its own line, after all "
        "other text. Do not comment on it:\n\n%s")
-BAR_ABOVE_PASTE = ("[token-diet] Put this exact line on its own line just above the paste "
+BAR_ABOVE_PASTE = ("[chat-weight] Put this exact line on its own line just above the paste "
                    "block, which stays the very last thing. Do not comment on it:\n\n%s")
-NUDGE = ("[token-diet] Still no handoff note, and chat weight is %d%%. At the next safe "
+NUDGE = ("[chat-weight] Still no handoff note, and chat weight is %d%%. At the next safe "
          "break, write it as %s says.")
-UNREADABLE = ("[token-diet] token-diet could not measure this chat: this version of Claude "
-              "Code writes its chat log in a way token-diet does not recognise. At the end of "
+UNREADABLE = ("[chat-weight] chat-weight could not measure this chat: this version of Claude "
+              "Code writes its chat log in a way chat-weight does not recognise. At the end of "
               "your reply, tell the user in one line that the chat-weight bar is paused and "
-              "that updating token-diet (git pull in its folder) should bring it back. Say it "
+              "that updating chat-weight (git pull in its folder) should bring it back. Say it "
               "once; do not repeat it in later replies.")
 
 
@@ -62,7 +62,7 @@ def handoff_request(r, cfg, root):
     folder = td_common.in_project(root, cfg["handoff_folder"])
     note = os.path.join(folder, "%s-<short-topic>.md" % datetime.now().strftime("%Y-%m-%d"))
     parts = [
-        "[token-diet] HANDOFF — chat weight is %d%%, past the %d%% line: this chat has grown "
+        "[chat-weight] HANDOFF — chat weight is %d%%, past the %d%% line: this chat has grown "
         "about %dk tokens since it started, and every reply re-reads all of it. A fresh chat "
         "is now cheaper." % (r["pct"], cfg["fresh_chat_pct"], r["growth"] // 1000),
         "Never interrupt unfinished work: an edit and the check that proves it are one step. "
@@ -99,7 +99,7 @@ def build(data):
         folder = td_common.in_project(root, cfg["handoff_folder"])
         note = asked.get("at") and newest_note_since(folder, asked["at"])
         if note:
-            out.append("[token-diet] The handoff note is written: %s. If the user carries on "
+            out.append("[chat-weight] The handoff note is written: %s. If the user carries on "
                        "here, help them, but remind them in one line that a fresh chat "
                        "with the paste block is cheaper." % note)
         elif asked.get("at"):

@@ -1,12 +1,12 @@
-# token-diet
+# chat-weight
 
-**Long AI chats get expensive. token-diet tells you when a fresh chat would be cheaper,
+**Long AI chats get expensive. chat-weight tells you when a fresh chat would be cheaper,
 and writes the handoff so nothing is lost.**
 
 With every reply, Claude re-reads the whole chat: your messages, the files, its own earlier
 answers. In my own Claude Code logs, 99.4% of 11.6 billion tokens went on that re-reading,
 and only 0.6% on the code and answers Claude actually wrote. A reply deep into a long chat
-cost about 4× one near the start. Run against those same logs, token-diet's rule would have
+cost about 4× one near the start. Run against those same logs, chat-weight's rule would have
 done the same work for about 15% fewer tokens. That figure is an estimate, and it already
 counts the cost of every fresh chat re-loading what it needs.
 
@@ -56,7 +56,7 @@ that chat:
   project files). This isn't counted.
 - **Restart cost:** what a fresh chat must re-load to carry on (the note plus the files it
   needs). On day one this is a sensible 30k tokens. Each time you start a chat from a
-  handoff's paste block, token-diet measures what that chat loaded before its first edit
+  handoff's paste block, chat-weight measures what that chat loaded before its first edit
   and keeps the last 20 such numbers. From the third one on, it uses their middle value,
   kept between 10k and 90k so one odd chat can't throw it off. It keeps learning for as long
   as you use it.
@@ -85,28 +85,28 @@ You need Claude Code, git and Python 3.8 or newer.
 **Mac / Linux**
 
 ```bash
-git clone https://github.com/adarsh733/token-diet ~/.claude/skills/token-diet
-python3 ~/.claude/skills/token-diet/install.py
+git clone https://github.com/adarsh733/chat-weight ~/.claude/skills/chat-weight
+python3 ~/.claude/skills/chat-weight/install.py
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-git clone https://github.com/adarsh733/token-diet "$HOME\.claude\skills\token-diet"
-python "$HOME\.claude\skills\token-diet\install.py"
+git clone https://github.com/adarsh733/chat-weight "$HOME\.claude\skills\chat-weight"
+python "$HOME\.claude\skills\chat-weight\install.py"
 ```
 
 Then open a new chat. That's it.
 
 **Or ask Claude to do it.** Paste this into Claude Code:
 
-> Install token-diet from https://github.com/adarsh733/token-diet — follow the "For AI
+> Install chat-weight from https://github.com/adarsh733/chat-weight — follow the "For AI
 > assistants" steps in its README.
 
 ### For AI assistants installing this
 
 1. Find a working Python 3.8+ (`python3 --version`, else `python --version`, else `py -3 --version`).
-2. Clone into the user's home folder, exactly here: `<home>/.claude/skills/token-diet`. If
+2. Clone into the user's home folder, exactly here: `<home>/.claude/skills/chat-weight`. If
    that folder already exists, run `git pull` inside it instead.
 3. Run `install.py` from that folder with that same Python. Do not edit
    `~/.claude/settings.json` by hand; the installer backs it up, changes only its own two
@@ -118,34 +118,36 @@ that runs when you send a message. It touches nothing else. It saves a backup fi
 checks the result, and puts the backup back if anything looks wrong.
 
 If you already have a status line, it stays: the bar still shows at the end of every reply.
-To show token-diet's bar there instead, run `python install.py --statusline`, and
+To show chat-weight's bar there instead, run `python install.py --statusline`, and
 `--uninstall` will give yours back.
 
 - Preview without changing anything: `python install.py --dry-run`
 - Remove it: `python install.py --uninstall` (your old status bar comes back if you had one)
 - Upgrading: `git pull` in this folder, then run `install.py` again. Old entries are cleaned up.
+- Had it under its old name, **token-diet**? The same two steps work from your old folder.
+  Your settings and learned numbers carry over to `~/.claude/chat-weight/`.
 - Moved or upgraded Python? Run `install.py` again so the hook points at the new one.
-- To remove every trace: uninstall, then delete this folder and token-diet's small notes
-  folder, `~/.claude/token-diet/`. Notes from chats older than 30 days are cleared
+- To remove every trace: uninstall, then delete this folder and chat-weight's small notes
+  folder, `~/.claude/chat-weight/`. Notes from chats older than 30 days are cleared
   automatically while it is installed.
 
 ## Change the settings
 
-Create `~/.claude/token-diet/config.json` containing only what you want to change, for
+Create `~/.claude/chat-weight/config.json` containing only what you want to change, for
 example to hand off later:
 
 ```json
 { "restart_multiple": 6 }
 ```
 
-For a single project, put it in `<project>/.claude/token-diet.json` instead. Every setting
+For a single project, put it in `<project>/.claude/chat-weight.json` instead. Every setting
 is explained in [`config.json`](config.json).
 
 To give a project its own handoff rules (for example "also update the changelog"), write
 them in `<project>/.claude/handoff-extra.md`.
 
 If a project sits inside a bigger folder that should own the notes and rules, point it
-there from `<project>/.claude/token-diet.json`:
+there from `<project>/.claude/chat-weight.json`:
 
 ```json
 { "handoff_folder": "../.claude/handoffs", "handoff_extra": "../.claude/handoff-extra.md" }
@@ -166,16 +168,16 @@ add their model names to the `models` section of your config. If that list is mo
 
 ## Honest limits
 
-- token-diet acts when you send a message. One message that starts a very long run can
+- chat-weight acts when you send a message. One message that starts a very long run can
   grow past 60% before it gets a chance to speak.
 - The 15% is counted in tokens. Claude caches re-read text and charges less for it, so the
   effect on your plan's limit may be smaller.
 - The bar at the end of each reply is itself a few dozen tokens per reply. That is small
   next to what it saves, but it is not zero.
 - Only Claude Code is measured today.
-- token-diet reads Claude Code's own chat log. If a future Claude Code changes that log's
+- chat-weight reads Claude Code's own chat log. If a future Claude Code changes that log's
   format, the bar does not show a wrong number: it says it is paused, once, and asks you to
-  update token-diet.
+  update chat-weight.
 
 ## License
 

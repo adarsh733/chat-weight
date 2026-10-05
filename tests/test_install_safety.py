@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Safety and regression tests for token-diet installer (P0).
+"""Safety and regression tests for chat-weight installer (P0).
 
 Covers:
 1. Absent settings.json -> created correctly, statusLine is a valid dict.
 2. Unrelated keys (env, permissions, model, apiKeyHelper, custom hooks) -> all survive intact.
 3. Malformed settings.json -> installer exits 1, file left byte-identical.
-4. String statusLine -> converted to valid dict, previous value preserved in _tokenDietPreviousStatusLine.
+4. String statusLine -> converted to valid dict, previous value preserved in _chatWeightPreviousStatusLine.
 5. Idempotency -> running install multiple times produces no duplicate hook entries.
 6. Uninstall -> --uninstall restores pre-install state.
 7. Hook runs a real Python directly; a broken Python or old Claude Code is handled.
-8. Upgrade -> hooks from older token-diet versions are removed; look-alikes from other tools stay.
+8. Upgrade -> hooks from older chat-weight versions are removed; look-alikes from other tools stay.
 9. A working status line someone already has is kept, unless they pass --statusline.
-10. Another tool's on_prompt.py / statusline.py is never treated as token-diet's.
+10. Another tool's on_prompt.py / statusline.py is never treated as chat-weight's.
 """
 import json
 import os
@@ -126,7 +126,7 @@ class TestInstallSafety(unittest.TestCase):
         self.assertIsInstance(data["statusLine"], dict)
         self.assertEqual(data["statusLine"]["type"], "command")
         self.assertIn("statusline.py", data["statusLine"]["command"])
-        self.assertEqual(data.get("_tokenDietPreviousStatusLine"), original_string_status)
+        self.assertEqual(data.get("_chatWeightPreviousStatusLine"), original_string_status)
 
     def test_5_idempotent_no_duplicate_hooks(self):
         """5. Running install twice -> idempotent, no duplicate hook entries."""
@@ -164,7 +164,7 @@ class TestInstallSafety(unittest.TestCase):
         with open(self.settings_path, "r", encoding="utf-8") as fh:
             installed_data = json.load(fh)
         self.assertIsInstance(installed_data["statusLine"], dict)
-        self.assertIn("_tokenDietPreviousStatusLine", installed_data)
+        self.assertIn("_chatWeightPreviousStatusLine", installed_data)
 
         # Uninstall
         res_uninst = self._run_installer("--uninstall")
@@ -174,7 +174,7 @@ class TestInstallSafety(unittest.TestCase):
             uninstalled_data = json.load(fh)
 
         self.assertEqual(uninstalled_data.get("statusLine"), "my-custom-statusline")
-        self.assertNotIn("_tokenDietPreviousStatusLine", uninstalled_data)
+        self.assertNotIn("_chatWeightPreviousStatusLine", uninstalled_data)
         self.assertEqual(uninstalled_data.get("model"), "sonnet")
         self.assertIn("UserPromptSubmit", uninstalled_data.get("hooks", {}))
         self.assertNotIn("SessionStart", uninstalled_data.get("hooks", {}))
@@ -219,18 +219,18 @@ class TestInstallSafety(unittest.TestCase):
         """7c. Claude Code older than 2.1.139 has no exec form: one shell line instead."""
         sys.path.insert(0, ROOT)
         import install
-        h = install.hook_entry("C:/Py/python.exe", "C:/x/token-diet/hooks/on_prompt.py", False)
-        self.assertEqual(h["command"], "C:/Py/python.exe C:/x/token-diet/hooks/on_prompt.py")
+        h = install.hook_entry("C:/Py/python.exe", "C:/x/chat-weight/hooks/on_prompt.py", False)
+        self.assertEqual(h["command"], "C:/Py/python.exe C:/x/chat-weight/hooks/on_prompt.py")
         self.assertNotIn("args", h)
         self.assertTrue(install.is_ours(h))
         self.assertTrue(install.is_ours(install.hook_entry("/usr/bin/python3",
-                                                           "/h/token-diet/hooks/on_prompt.py", True)))
+                                                           "/h/chat-weight/hooks/on_prompt.py", True)))
         self.assertFalse(install.is_ours({"command": "python3", "args": ["/h/mytools/on_prompt.py"]}))
 
-    def test_8_upgrade_removes_old_token_diet_hooks_only(self):
-        """8. Old token-diet entries go; a same-named script from another tool stays."""
+    def test_8_upgrade_removes_old_hooks_only(self):
+        """8. Old chat-weight entries go; a same-named script from another tool stays."""
         os.makedirs(self.settings_dir, exist_ok=True)
-        old = "/home/x/.claude/skills/token-diet/hooks/"
+        old = "/home/x/.claude/skills/token-diet/hooks/"       # v1, under the old name
         with open(self.settings_path, "w", encoding="utf-8") as fh:
             json.dump({"hooks": {
                 "UserPromptSubmit": [
@@ -262,14 +262,14 @@ class TestInstallSafety(unittest.TestCase):
         with open(self.settings_path, encoding="utf-8") as fh:
             data = json.load(fh)
         self.assertEqual(data["statusLine"], theirs)
-        self.assertNotIn("_tokenDietPreviousStatusLine", data)
+        self.assertNotIn("_chatWeightPreviousStatusLine", data)
         self.assertEqual(json.dumps(data["hooks"]).count("on_prompt.py"), 1)
 
         self.assertEqual(self._run_installer("--statusline").returncode, 0)
         with open(self.settings_path, encoding="utf-8") as fh:
             data = json.load(fh)
         self.assertIn("statusline.py", data["statusLine"]["command"])
-        self.assertEqual(data["_tokenDietPreviousStatusLine"], theirs)
+        self.assertEqual(data["_chatWeightPreviousStatusLine"], theirs)
 
         self.assertEqual(self._run_installer("--uninstall").returncode, 0)
         with open(self.settings_path, encoding="utf-8") as fh:
@@ -293,6 +293,28 @@ class TestInstallSafety(unittest.TestCase):
         self.assertEqual(self._run_installer("--uninstall").returncode, 0)
         with open(self.settings_path, encoding="utf-8") as fh:
             self.assertEqual(json.load(fh), before)
+
+    def test_11_upgrade_from_the_old_name(self):
+        """11. A token-diet v2 install moves to chat-weight: old hook and status line
+        replaced, a status line saved under the old key still comes back on uninstall."""
+        os.makedirs(self.settings_dir, exist_ok=True)
+        old = "/home/x/.claude/skills/token-diet/"
+        theirs = {"type": "command", "command": "npx ccstatusline"}
+        with open(self.settings_path, "w", encoding="utf-8") as fh:
+            json.dump({"statusLine": {"type": "command", "command": "py " + old + "scripts/statusline.py"},
+                       "_tokenDietPreviousStatusLine": theirs,
+                       "hooks": {"UserPromptSubmit": [{"hooks": [
+                           {"type": "command", "command": "/usr/bin/python3", "args": [old + "hooks/on_prompt.py"]}]}]}}, fh)
+        self.assertEqual(self._run_installer().returncode, 0)
+        with open(self.settings_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        blob = json.dumps(data)
+        self.assertNotIn(old, blob)
+        self.assertEqual(blob.count("on_prompt.py"), 1)
+        self.assertEqual(data["_chatWeightPreviousStatusLine"], theirs)
+        self.assertEqual(self._run_installer("--uninstall").returncode, 0)
+        with open(self.settings_path, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), {"statusLine": theirs})
 
 
 if __name__ == "__main__":

@@ -29,9 +29,24 @@ SHARED_STATE = ("restart-costs.json", "pruned.json")
 
 # ------------------------------------------------------------------ storage
 
+OLD_NAME = "token-diet"      # this project's name until 2026-10-05
+
+
+def home_dir():
+    """~/.claude/chat-weight: the user's settings and notes. A folder left by the
+    old name is moved here once, so learned numbers and settings carry over."""
+    claude = os.path.join(os.path.expanduser("~"), ".claude")
+    d, old = os.path.join(claude, "chat-weight"), os.path.join(claude, OLD_NAME)
+    if not os.path.exists(d) and os.path.isdir(old):
+        try:
+            os.rename(old, d)
+        except Exception:
+            pass
+    return d
+
+
 def state_dir():
-    d = os.environ.get("TOKEN_DIET_STATE") or os.path.join(
-        os.path.expanduser("~"), ".claude", "token-diet", "state")
+    d = os.environ.get("CHAT_WEIGHT_STATE") or os.path.join(home_dir(), "state")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -116,9 +131,11 @@ def in_project(root, rel):
 def load_config(cwd=None):
     """Defaults from config.json, then the user's file, then the project's."""
     cfg = read_json(os.path.join(ROOT, "config.json")) or {}
-    _merge(cfg, read_json(os.path.join(os.path.expanduser("~"), ".claude", "token-diet", "config.json")))
+    _merge(cfg, read_json(os.path.join(home_dir(), "config.json")))
     if cwd:
-        _merge(cfg, read_json(os.path.join(project_root(cwd), ".claude", "token-diet.json")))
+        proj = os.path.join(project_root(cwd), ".claude")
+        _merge(cfg, read_json(os.path.join(proj, "chat-weight.json"))
+               or read_json(os.path.join(proj, OLD_NAME + ".json")))   # the old name still works
     for key, val in (("wrap_up_pct", 40), ("fresh_chat_pct", 60), ("restart_multiple", 4),
                      ("restart_tokens_default", 30000), ("memory_cap_pct", 70)):
         cfg.setdefault(key, val)
@@ -173,7 +190,7 @@ def last_reply(transcript_path):
     """(tokens, model, readable) of the newest main-chat reply.
 
     tokens is 0 when there is no reply yet. readable is False when the log has
-    replies but none carries a size token-diet understands -- that means Claude
+    replies but none carries a size chat-weight understands -- that means Claude
     Code changed its log format, and the honest answer is "can't measure", not 0%.
     Interrupted replies are saved with a placeholder model; only a real model id counts.
     """

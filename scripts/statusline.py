@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""token-diet status line: the progress bar at the bottom of the Claude Code terminal.
+"""chat-weight status line: the progress bar at the bottom of the Claude Code terminal.
 
 Free: Claude Code runs this on your machine and never sends it to the model.
 It also passes the model's real window size, which is saved so the prompt
@@ -28,7 +28,7 @@ def main():
         cfg = td_common.load_config((payload.get("workspace") or {}).get("project_dir") or payload.get("cwd"))
         r = td_common.measure(payload.get("transcript_path"), sid, cfg)
         if r["unreadable"]:
-            line = "token-diet paused: can't read this Claude Code version's chat log — update token-diet"
+            line = "chat-weight paused: can't read this Claude Code version's chat log — update chat-weight"
         elif r["measured"]:
             line = render(r["pct"], cfg)
         else:

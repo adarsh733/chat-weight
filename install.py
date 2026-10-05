@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Installer for token-diet.
+"""Installer for chat-weight.
 
 Adds two things to ~/.claude/settings.json: the status line and one hook that runs
 when you send a message. Backs the file up first, touches nothing else, checks the
@@ -7,8 +7,8 @@ result and puts the backup back if anything is wrong.
 
     python install.py             install (or upgrade)
     python install.py --dry-run   show the change, write nothing
-    python install.py --uninstall remove token-diet, restore your old status line
-    python install.py --statusline  use token-diet's status line even if you have one
+    python install.py --uninstall remove chat-weight, restore your old status line
+    python install.py --statusline  use chat-weight's status line even if you have one
 """
 import argparse
 import copy
@@ -45,7 +45,7 @@ def create_backup(path):
     if not os.path.isfile(path):
         return None
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_path = f"{path}.token-diet-backup-{timestamp}"
+    backup_path = f"{path}.chat-weight-backup-{timestamp}"
     try:
         shutil.copy2(path, backup_path)
     except Exception as err:
@@ -77,14 +77,18 @@ def save_settings(path, data):
 
 
 OURS = ("on_prompt.py",)
-OLD = ("session_guard.py", "usage_meter.py", "savings_note.py")  # earlier token-diet versions
+OLD = ("session_guard.py", "usage_meter.py", "savings_note.py")  # v1 scripts, removed in v2
+OLD_NAME = "token-diet"                 # this project's name until 2026-10-05
+OLD_KEY = "_tokenDietPreviousStatusLine"
+KEY = "_chatWeightPreviousStatusLine"
 
 
 def _from_us(command):
-    """True when a command runs a script from a token-diet folder. A script name alone is
+    """True when a command runs a script from a chat-weight folder. A script name alone is
     not proof: other tools ship their own on_prompt.py and statusline.py."""
     command = str(command or "").replace("\\", "/").lower()
-    return "token-diet" in command or ROOT.replace("\\", "/").lower() in command
+    return ("chat-weight" in command or OLD_NAME in command
+            or ROOT.replace("\\", "/").lower() in command)
 
 
 def hook_text(h):
@@ -97,7 +101,7 @@ def hook_text(h):
 
 
 def is_ours(h):
-    """A hook entry that belongs to token-diet: this version, or an older one being upgraded."""
+    """A hook entry that belongs to chat-weight: this version, or an older one being upgraded."""
     text = hook_text(h)
     return _from_us(text) and any(s in text for s in OURS + OLD)
 
@@ -184,10 +188,10 @@ def is_our_statusline(value):
 
 
 def extract_unrelated_state(data):
-    """Capture all keys and hooks not owned by token-diet."""
+    """Capture all keys and hooks not owned by chat-weight."""
     unrelated_top = {
         k: copy.deepcopy(v) for k, v in data.items()
-        if k not in ("statusLine", "hooks", "_tokenDietPreviousStatusLine")
+        if k not in ("statusLine", "hooks", KEY, OLD_KEY)
     }
     unrelated_hooks = {}
     if "hooks" in data and isinstance(data["hooks"], dict):
@@ -240,7 +244,7 @@ def verify_written_file(path, unrelated_top, unrelated_hooks, is_uninstall=False
 
 
 def strip_ours(data):
-    """Remove every token-diet hook entry (this version and older ones); drop empty events."""
+    """Remove every chat-weight hook entry (this version and older ones); drop empty events."""
     hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         return
@@ -268,6 +272,8 @@ def apply_install(data, python_bin, statusline_script, prompt_script, take_statu
     # 1. statusLine. A working one that belongs to someone else stays, unless the user
     #    asks for ours (--statusline); the bar still shows at the end of every reply.
     statusline_cmd = command_line(python_bin, statusline_script)
+    if OLD_KEY in data:                 # saved under the old name: keep it under the new one
+        data.setdefault(KEY, data.pop(OLD_KEY))
     existing = data.get("statusLine")
     theirs_works = isinstance(existing, dict) and bool(existing.get("command")) \
         and not is_our_statusline(existing)
@@ -280,9 +286,9 @@ def apply_install(data, python_bin, statusline_script, prompt_script, take_statu
         print("run: python install.py --statusline")
     else:
         if existing is not None:
-            print("Saved your old status line under '_tokenDietPreviousStatusLine'; "
+            print("Saved your old status line under '_chatWeightPreviousStatusLine'; "
                   "--uninstall puts it back.")
-            data["_tokenDietPreviousStatusLine"] = existing
+            data[KEY] = existing
         data["statusLine"] = {"type": "command", "command": statusline_cmd}
 
     # 2. one hook, on every message the user sends
@@ -294,19 +300,22 @@ def apply_install(data, python_bin, statusline_script, prompt_script, take_statu
 
 
 def apply_uninstall(data):
-    if "_tokenDietPreviousStatusLine" in data:
-        data["statusLine"] = data.pop("_tokenDietPreviousStatusLine")
+    saved = [k for k in (KEY, OLD_KEY) if k in data]
+    if saved:
+        data["statusLine"] = data.pop(saved[0])
+        for k in saved[1:]:
+            data.pop(k)
         print("Restored previous statusLine configuration.")
     elif is_our_statusline(data.get("statusLine")):
         del data["statusLine"]
-        print("Removed token-diet statusLine.")
+        print("Removed chat-weight statusLine.")
     strip_ours(data)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Installer and manager for token-diet.")
+    parser = argparse.ArgumentParser(description="Installer and manager for chat-weight.")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without modifying settings.json")
-    parser.add_argument("--uninstall", action="store_true", help="Remove token-diet from settings.json")
+    parser.add_argument("--uninstall", action="store_true", help="Remove chat-weight from settings.json")
     parser.add_argument("--statusline", action="store_true",
                         help="Show the bar in the status line even if you already have one (yours is kept for --uninstall)")
     args = parser.parse_args()
@@ -329,7 +338,7 @@ def main():
     else:
         problem = self_test(python_bin, prompt_script, statusline_script)
         if problem:
-            print("Stopped before changing anything: token-diet's scripts did not run.")
+            print("Stopped before changing anything: chat-weight's scripts did not run.")
             print("Details: " + problem)
             print("Nothing was changed. Try running install.py with another Python 3.8+.")
             sys.exit(1)
@@ -369,7 +378,7 @@ def main():
         sys.exit(1)
 
     if args.uninstall:
-        print("Uninstall complete. Token Diet has been removed from your settings.")
+        print("Uninstall complete. chat-weight has been removed from your settings.")
         print(f"Updated configuration in: {settings_path}")
     else:
         print("Setup complete. Start a new Claude Code chat and the chat-weight bar appears at the")

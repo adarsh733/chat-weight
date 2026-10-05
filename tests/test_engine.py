@@ -35,8 +35,8 @@ class Base(unittest.TestCase):
         os.makedirs(os.path.join(self.project, ".git"))
         os.makedirs(self.home)
         self.env = dict(os.environ, HOME=self.home, USERPROFILE=self.home,
-                        TOKEN_DIET_STATE=os.path.join(self.tmp, "state"))
-        os.environ["TOKEN_DIET_STATE"] = self.env["TOKEN_DIET_STATE"]
+                        CHAT_WEIGHT_STATE=os.path.join(self.tmp, "state"))
+        os.environ["CHAT_WEIGHT_STATE"] = self.env["CHAT_WEIGHT_STATE"]
         self.cfg = td_common.load_config(self.project)
 
     def tearDown(self):
@@ -117,6 +117,36 @@ class TestNumber(Base):
         self.assertEqual((r["measured"], r["pct"]), (True, 30))
 
 
+class TestOldName(Base):
+    def test_notes_and_settings_under_the_old_name_carry_over(self):
+        old = os.path.join(self.home, ".claude", "token-diet")
+        os.makedirs(os.path.join(old, "state"))
+        with open(os.path.join(old, "config.json"), "w") as fh:
+            json.dump({"fresh_chat_pct": 70}, fh)
+        with open(os.path.join(old, "state", "restart-costs.json"), "w") as fh:
+            json.dump({"samples": [1, 2, 3]}, fh)
+        prev = os.environ.get("USERPROFILE"), os.environ.get("HOME")
+        os.environ["USERPROFILE"] = os.environ["HOME"] = self.home
+        try:
+            cfg = td_common.load_config(self.project)
+        finally:
+            for k, v in zip(("USERPROFILE", "HOME"), prev):
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        new = os.path.join(self.home, ".claude", "chat-weight")
+        self.assertEqual(cfg["fresh_chat_pct"], 70)
+        self.assertFalse(os.path.exists(old))
+        self.assertTrue(os.path.isfile(os.path.join(new, "state", "restart-costs.json")))
+
+    def test_a_project_file_under_the_old_name_still_works(self):
+        os.makedirs(os.path.join(self.project, ".claude"))
+        with open(os.path.join(self.project, ".claude", "token-diet.json"), "w") as fh:
+            json.dump({"wrap_up_pct": 25}, fh)
+        self.assertEqual(td_common.load_config(self.project)["wrap_up_pct"], 25)
+
+
 class TestHousekeeping(Base):
     def test_old_chat_notes_are_deleted_once_a_day_and_shared_ones_kept(self):
         d = td_common.state_dir()
@@ -148,11 +178,11 @@ class TestWindow(Base):
         self.assertEqual(td_common.window_for(self.cfg, "c", "claude-new-9", 350000), 1000000)
 
     def test_user_and_project_files_override_defaults(self):
-        os.makedirs(os.path.join(self.home, ".claude", "token-diet"))
-        with open(os.path.join(self.home, ".claude", "token-diet", "config.json"), "w") as fh:
+        os.makedirs(os.path.join(self.home, ".claude", "chat-weight"))
+        with open(os.path.join(self.home, ".claude", "chat-weight", "config.json"), "w") as fh:
             json.dump({"fresh_chat_pct": 70}, fh)
         os.makedirs(os.path.join(self.project, ".claude"))
-        with open(os.path.join(self.project, ".claude", "token-diet.json"), "w") as fh:
+        with open(os.path.join(self.project, ".claude", "chat-weight.json"), "w") as fh:
             json.dump({"wrap_up_pct": 30}, fh)
         old = os.environ.get("USERPROFILE"), os.environ.get("HOME")
         os.environ["USERPROFILE"] = os.environ["HOME"] = self.home
@@ -311,7 +341,7 @@ class TestHook(Base):
         parent = os.path.join(self.tmp, ".claude")
         os.makedirs(os.path.join(self.project, ".claude"))
         os.makedirs(parent)
-        with open(os.path.join(self.project, ".claude", "token-diet.json"), "w") as fh:
+        with open(os.path.join(self.project, ".claude", "chat-weight.json"), "w") as fh:
             json.dump({"handoff_folder": "../.claude/handoffs",
                        "handoff_extra": "../.claude/handoff-extra.md"}, fh)
         with open(os.path.join(parent, "handoff-extra.md"), "w", encoding="utf-8") as fh:
@@ -347,7 +377,7 @@ class TestStatusLine(Base):
         data = {"session_id": "sl2", "transcript_path": self.chat(new), "cwd": self.project}
         res = subprocess.run([sys.executable, STATUS], input=json.dumps(data).encode("utf-8"),
                              capture_output=True, env=self.env)
-        self.assertIn("token-diet paused", res.stdout.decode("utf-8"))
+        self.assertIn("chat-weight paused", res.stdout.decode("utf-8"))
 
 
 if __name__ == "__main__":
