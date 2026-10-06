@@ -228,27 +228,24 @@ class TestInstallSafety(unittest.TestCase):
         self.assertFalse(install.is_ours({"command": "python3", "args": ["/h/mytools/on_prompt.py"]}))
 
     def test_8_upgrade_removes_old_hooks_only(self):
-        """8. Old chat-weight entries go; a same-named script from another tool stays."""
+        """8. An entry from a moved chat-weight folder goes; a same-named script from
+        another tool stays."""
         os.makedirs(self.settings_dir, exist_ok=True)
-        old = "/home/x/.claude/skills/token-diet/hooks/"       # v1, under the old name
+        old = "/home/x/old-place/chat-weight/hooks/"           # an earlier install, since moved
         with open(self.settings_path, "w", encoding="utf-8") as fh:
             json.dump({"hooks": {
                 "UserPromptSubmit": [
-                    {"hooks": [{"type": "command", "command": "python " + old + "session_guard.py"}]},
-                    {"hooks": [{"type": "command", "command": "python /opt/other/session_guard.py"}]}],
-                "SessionStart": [{"matcher": "startup", "hooks": [
-                    {"type": "command", "command": "python " + old + "savings_note.py"}]}],
-                "Stop": [{"hooks": [{"type": "command", "command": "python " + old + "usage_meter.py"}]}],
+                    {"hooks": [{"type": "command", "command": "python " + old + "on_prompt.py"}]},
+                    {"hooks": [{"type": "command", "command": "python /opt/other/on_prompt.py"}]}],
             }}, fh)
         res = self._run_installer()
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         with open(self.settings_path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
-        self.assertEqual(sorted(data["hooks"]), ["UserPromptSubmit"])
         blob = json.dumps(data["hooks"])
-        self.assertIn("/opt/other/session_guard.py", blob)
-        self.assertNotIn("token-diet/hooks/session_guard.py", blob)
-        self.assertEqual(blob.count("on_prompt.py"), 1)
+        self.assertIn("/opt/other/on_prompt.py", blob)
+        self.assertNotIn(old, blob)
+        self.assertEqual(blob.count("on_prompt.py"), 2)
 
     def test_9_a_working_status_line_is_kept_unless_asked(self):
         """9. Someone's working status line stays; --statusline takes over; uninstall gives it back."""
@@ -293,28 +290,6 @@ class TestInstallSafety(unittest.TestCase):
         self.assertEqual(self._run_installer("--uninstall").returncode, 0)
         with open(self.settings_path, encoding="utf-8") as fh:
             self.assertEqual(json.load(fh), before)
-
-    def test_11_upgrade_from_the_old_name(self):
-        """11. A token-diet v2 install moves to chat-weight: old hook and status line
-        replaced, a status line saved under the old key still comes back on uninstall."""
-        os.makedirs(self.settings_dir, exist_ok=True)
-        old = "/home/x/.claude/skills/token-diet/"
-        theirs = {"type": "command", "command": "npx ccstatusline"}
-        with open(self.settings_path, "w", encoding="utf-8") as fh:
-            json.dump({"statusLine": {"type": "command", "command": "py " + old + "scripts/statusline.py"},
-                       "_tokenDietPreviousStatusLine": theirs,
-                       "hooks": {"UserPromptSubmit": [{"hooks": [
-                           {"type": "command", "command": "/usr/bin/python3", "args": [old + "hooks/on_prompt.py"]}]}]}}, fh)
-        self.assertEqual(self._run_installer().returncode, 0)
-        with open(self.settings_path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        blob = json.dumps(data)
-        self.assertNotIn(old, blob)
-        self.assertEqual(blob.count("on_prompt.py"), 1)
-        self.assertEqual(data["_chatWeightPreviousStatusLine"], theirs)
-        self.assertEqual(self._run_installer("--uninstall").returncode, 0)
-        with open(self.settings_path, encoding="utf-8") as fh:
-            self.assertEqual(json.load(fh), {"statusLine": theirs})
 
 
 if __name__ == "__main__":

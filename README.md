@@ -35,7 +35,7 @@ reply with three lines to paste into a new chat:
 ```
 Continuing: add search to the recipes page
 Note: /home/you/project/.claude/handoffs/2026-10-01-recipe-search.md
-Read that note and start at section 4, item 1. Claude Code · sonnet · Medium.
+Read that note and start at section 4, item 1. Claude Code · middle level (sonnet) · Medium.
 ```
 
 The note covers what is done, what's next, what was decided, and which model fits the next
@@ -121,11 +121,12 @@ If you already have a status line, it stays: the bar still shows at the end of e
 To show chat-weight's bar there instead, run `python install.py --statusline`, and
 `--uninstall` will give yours back.
 
+In the terminal's bar the empty squares are 🔳, because many terminal fonts draw ⬜ small and
+hollow. If yours draws ⬜ well, set `"statusline_empty": "⬜"` in your config.
+
 - Preview without changing anything: `python install.py --dry-run`
 - Remove it: `python install.py --uninstall` (your old status bar comes back if you had one)
 - Upgrading: `git pull` in this folder, then run `install.py` again. Old entries are cleaned up.
-- Had it under its old name, **token-diet**? The same two steps work from your old folder.
-  Your settings and learned numbers carry over to `~/.claude/chat-weight/`.
 - Moved or upgraded Python? Run `install.py` again so the hook points at the new one.
 - To remove every trace: uninstall, then delete this folder and chat-weight's small notes
   folder, `~/.claude/chat-weight/`. Notes from chats older than 30 days are cleared
@@ -165,6 +166,11 @@ In Claude Code it uses the short names `opus`, `sonnet` and `haiku`. Claude Code
 points these at the newest model of each kind, so nothing needs updating. For other tools,
 add their model names to the `models` section of your config. If that list is more than
 3 months old, the handoff adds "(or newer)".
+
+A handoff never names a version number like "Opus 5": that is out of date the day a newer
+model ships. The level comes first, in words, so the note still reads right when a whole
+new model family appears. If your project's own handoff rules (`handoff_extra`, or a file it
+links to) pin a version, the handoff uses the level instead and tells you which file to fix.
 
 ## Honest limits
 

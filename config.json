@@ -7,6 +7,8 @@
   "restart_multiple": 4,
   "restart_tokens_default": 30000,
   "memory_cap_pct": 70,
+  "_statusline_empty_why": "The empty square in the terminal's bottom bar. Many terminal fonts draw ⬜ small and hollow; 🔳 always comes from the emoji font, so it matches the coloured squares. Set it back to ⬜ if your terminal draws that one well.",
+  "statusline_empty": "🔳",
   "handoff_folder": ".claude/handoffs",
   "handoff_extra": ".claude/handoff-extra.md",
   "_paths_why": "Both paths are relative to the project folder (the nearest one holding .git or .claude). \"../\" steps out of it, so a sub-project can share its parent's notes and rules.",

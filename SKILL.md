@@ -29,10 +29,12 @@ them short:
 
 ## Model names in a handoff
 
-Name the **level** the next chat's work needs (top for thinking, middle for building an
-agreed plan, small for routine work), plus the model name for that level. In Claude Code
-use `opus`, `sonnet` and `haiku`: Claude Code points these at the newest model of each
-kind, so they never go out of date. Other tools' names come from `config.json` → `models`.
+Name the **level** the next chat's work needs first, in words (top for thinking,
+middle for building an agreed plan, small for routine work), then the model name for that
+level. In Claude Code use `opus`, `sonnet` and `haiku`: Claude Code points these at the
+newest model of each kind, so they never go out of date. Other tools' names come from
+`config.json` → `models`. **Never write a version number** ("Opus 5"), even when the
+project's own rules do — the hook flags those files so the user can fix them.
 
 ## Install
 

@@ -16,8 +16,11 @@ import td_common  # noqa: E402
 
 
 def render(pct, cfg):
-    """The same bar as in the replies, without the bold markers a terminal can't show."""
-    return td_common.bar_line(pct, cfg).replace("***", "")
+    """The same bar as in the replies, without the bold markers a terminal can't show.
+    Many terminal fonts draw the reply's empty square (⬜) themselves, small and hollow,
+    so the terminal gets an emoji-only square that renders the same size as the coloured ones."""
+    empty = cfg.get("statusline_empty") or td_common.EMPTY
+    return td_common.bar_line(pct, cfg).replace("***", "").replace(td_common.EMPTY, empty)
 
 
 def main():

@@ -117,36 +117,6 @@ class TestNumber(Base):
         self.assertEqual((r["measured"], r["pct"]), (True, 30))
 
 
-class TestOldName(Base):
-    def test_notes_and_settings_under_the_old_name_carry_over(self):
-        old = os.path.join(self.home, ".claude", "token-diet")
-        os.makedirs(os.path.join(old, "state"))
-        with open(os.path.join(old, "config.json"), "w") as fh:
-            json.dump({"fresh_chat_pct": 70}, fh)
-        with open(os.path.join(old, "state", "restart-costs.json"), "w") as fh:
-            json.dump({"samples": [1, 2, 3]}, fh)
-        prev = os.environ.get("USERPROFILE"), os.environ.get("HOME")
-        os.environ["USERPROFILE"] = os.environ["HOME"] = self.home
-        try:
-            cfg = td_common.load_config(self.project)
-        finally:
-            for k, v in zip(("USERPROFILE", "HOME"), prev):
-                if v is None:
-                    os.environ.pop(k, None)
-                else:
-                    os.environ[k] = v
-        new = os.path.join(self.home, ".claude", "chat-weight")
-        self.assertEqual(cfg["fresh_chat_pct"], 70)
-        self.assertFalse(os.path.exists(old))
-        self.assertTrue(os.path.isfile(os.path.join(new, "state", "restart-costs.json")))
-
-    def test_a_project_file_under_the_old_name_still_works(self):
-        os.makedirs(os.path.join(self.project, ".claude"))
-        with open(os.path.join(self.project, ".claude", "token-diet.json"), "w") as fh:
-            json.dump({"wrap_up_pct": 25}, fh)
-        self.assertEqual(td_common.load_config(self.project)["wrap_up_pct"], 25)
-
-
 class TestHousekeeping(Base):
     def test_old_chat_notes_are_deleted_once_a_day_and_shared_ones_kept(self):
         d = td_common.state_dir()
@@ -284,6 +254,7 @@ class TestModels(Base):
         text = "\n".join(td_common.model_lines(cfg))
         self.assertIn("top = opus", text)
         self.assertNotIn("opus (or newer)", text)
+        self.assertIn("Never write a version number", text)
 
     def test_other_tools_get_or_newer_when_the_list_is_old(self):
         cfg = json.loads(json.dumps(self.cfg))
@@ -337,6 +308,35 @@ class TestHook(Base):
             fh.write("Also release your file claims.")
         self.assertIn("Also release your file claims.", self.hook(self.chat(reply(START), self.at(65))))
 
+    def test_pinned_versions_in_project_rules_are_flagged(self):
+        os.makedirs(os.path.join(self.project, ".claude"))
+        os.makedirs(os.path.join(self.project, "docs"))
+        with open(os.path.join(self.project, ".claude", "handoff-extra.md"), "w", encoding="utf-8") as fh:
+            fh.write("Model names: use the table in `docs/models.md`.")
+        with open(os.path.join(self.project, "docs", "models.md"), "w", encoding="utf-8") as fh:
+            fh.write("| think | Opus 5 |\n| build | sonnet-4.5 |\n")
+        text = self.hook(self.chat(reply(START), self.at(65)))
+        self.assertIn("name fixed versions", text)
+        self.assertIn("Opus 5", text)
+        self.assertIn("sonnet-4.5", text)
+        self.assertIn("models.md", text)
+
+    def test_links_that_are_not_about_models_are_not_followed(self):
+        os.makedirs(os.path.join(self.project, ".claude"))
+        with open(os.path.join(self.project, ".claude", "handoff-extra.md"), "w", encoding="utf-8") as fh:
+            fh.write("Release your claim in `.claude/claims.md` first.")
+        with open(os.path.join(self.project, ".claude", "claims.md"), "w", encoding="utf-8") as fh:
+            fh.write("| done by Claude Code (Opus 5) |")
+        self.assertNotIn("name fixed versions", self.hook(self.chat(reply(START), self.at(65))))
+
+    def test_level_and_short_names_are_not_flagged(self):
+        os.makedirs(os.path.join(self.project, ".claude"))
+        with open(os.path.join(self.project, ".claude", "handoff-extra.md"), "w", encoding="utf-8") as fh:
+            fh.write("Thinking work: top level (opus). Building: sonnet. Release your claims.")
+        text = self.hook(self.chat(reply(START), self.at(65)))
+        self.assertIn("Release your claims.", text)
+        self.assertNotIn("name fixed versions", text)
+
     def test_a_sub_project_can_use_its_parents_notes_and_rules(self):
         parent = os.path.join(self.tmp, ".claude")
         os.makedirs(os.path.join(self.project, ".claude"))
@@ -371,6 +371,19 @@ class TestStatusLine(Base):
                              capture_output=True, env=self.env)
         self.assertEqual(res.returncode, 0)
         self.assertIn("chat weight 24%", res.stdout.decode("utf-8"))   # 48k of 120k -> 24
+
+    def test_terminal_bar_uses_full_size_empty_squares(self):
+        out = self.status_line(24)
+        self.assertIn("🟩🟩🔳🔳🔳🔳🔳🔳🔳🔳", out)
+        self.assertNotIn("⬜", out)
+        self.assertIn("⬜", td_common.bar_line(24, self.cfg))     # replies keep their square
+
+    def status_line(self, pct):
+        t = self.chat(reply(START), self.at(pct))
+        data = {"session_id": "sq", "transcript_path": t, "cwd": self.project}
+        res = subprocess.run([sys.executable, STATUS], input=json.dumps(data).encode("utf-8"),
+                             capture_output=True, env=self.env)
+        return res.stdout.decode("utf-8")
 
     def test_says_paused_when_the_log_cannot_be_read(self):
         new = {"type": "assistant", "message": {"model": "claude-opus-9", "tokenCounts": {"prompt": 1}}}

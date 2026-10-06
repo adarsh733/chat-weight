@@ -10,6 +10,7 @@ chat weighs 0%. Never raises: anything unmeasurable comes back measured=False.
 import io
 import json
 import os
+import re
 import time
 from datetime import date, datetime
 
@@ -29,20 +30,9 @@ SHARED_STATE = ("restart-costs.json", "pruned.json")
 
 # ------------------------------------------------------------------ storage
 
-OLD_NAME = "token-diet"      # this project's name until 2026-10-05
-
-
 def home_dir():
-    """~/.claude/chat-weight: the user's settings and notes. A folder left by the
-    old name is moved here once, so learned numbers and settings carry over."""
-    claude = os.path.join(os.path.expanduser("~"), ".claude")
-    d, old = os.path.join(claude, "chat-weight"), os.path.join(claude, OLD_NAME)
-    if not os.path.exists(d) and os.path.isdir(old):
-        try:
-            os.rename(old, d)
-        except Exception:
-            pass
-    return d
+    """~/.claude/chat-weight: the user's settings and notes."""
+    return os.path.join(os.path.expanduser("~"), ".claude", "chat-weight")
 
 
 def state_dir():
@@ -134,8 +124,7 @@ def load_config(cwd=None):
     _merge(cfg, read_json(os.path.join(home_dir(), "config.json")))
     if cwd:
         proj = os.path.join(project_root(cwd), ".claude")
-        _merge(cfg, read_json(os.path.join(proj, "chat-weight.json"))
-               or read_json(os.path.join(proj, OLD_NAME + ".json")))   # the old name still works
+        _merge(cfg, read_json(os.path.join(proj, "chat-weight.json")))
     for key, val in (("wrap_up_pct", 40), ("fresh_chat_pct", 60), ("restart_multiple", 4),
                      ("restart_tokens_default", 30000), ("memory_cap_pct", 70)):
         cfg.setdefault(key, val)
@@ -435,4 +424,39 @@ def model_lines(cfg):
         info = levels.get(lvl) or {}
         rows.append("  %s level is for %s · effort %s" % (lvl, info.get("for", "?"), info.get("effort", "?")))
     rows.append("  A tool not listed: name the level in words, e.g. \"your tool's strongest model\".")
+    rows.append("  Never write a version number (\"Opus 5\"): it goes stale the day a newer model ships.")
     return rows
+
+
+# A family name followed by a version: "Opus 5", "sonnet-4.5", "claude-haiku-4-5".
+PINNED = re.compile(r"\b(?:opus|sonnet|haiku|fable)[ -]?\d+(?:[.-]\d+)*\b", re.I)
+LINKED = re.compile(r"[`(]([^`()\s]+\.md)[`)]")
+
+
+def pinned_model_names(extra_path, root, limit=5):
+    """[(file, 'Opus 5'), …] — version-pinned model names in the project's handoff additions
+    and in up to `limit` .md files linked from their lines about models. Pinned names go stale with every release,
+    and project additions win over the skill's rules, so they would quietly bring it back."""
+    try:
+        with io.open(extra_path, encoding="utf-8") as fh:
+            text = fh.read(200000)
+    except Exception:
+        return []
+    found, files = [], [(extra_path, text)]
+    # Follow only links on lines about models: other links (a work log, a claims file)
+    # record who did what, and "done by Opus 5" there is history, not an instruction.
+    about_models = [line for line in text.splitlines() if "model" in line.lower()]
+    for rel in LINKED.findall("\n".join(about_models))[:limit]:
+        for base in (root, os.path.dirname(extra_path)):
+            p = os.path.normpath(os.path.join(base, rel))
+            if os.path.isfile(p):
+                try:
+                    with io.open(p, encoding="utf-8") as fh:
+                        files.append((p, fh.read(200000)))
+                except Exception:
+                    pass
+                break
+    for path, body in files:
+        names = sorted({m.group(0) for m in PINNED.finditer(body)})
+        found += [(path, n) for n in names]
+    return found

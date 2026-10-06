@@ -31,6 +31,10 @@ BAR_ABOVE_PASTE = ("[chat-weight] Put this exact line on its own line just above
                    "block, which stays the very last thing. Do not comment on it:\n\n%s")
 NUDGE = ("[chat-weight] Still no handoff note, and chat weight is %d%%. At the next safe "
          "break, write it as %s says.")
+PINNED = ("[chat-weight] Model names: this project's handoff rules name fixed versions (%s). "
+          "Those go stale when a newer model ships. In this handoff name the level and the "
+          "model name from the list above instead, and tell the user in one line which file "
+          "pins versions so they can change it.")
 UNREADABLE = ("[chat-weight] chat-weight could not measure this chat: this version of Claude "
               "Code writes its chat log in a way chat-weight does not recognise. At the end of "
               "your reply, tell the user in one line that the chat-weight bar is paused and "
@@ -71,9 +75,13 @@ def handoff_request(r, cfg, root):
         "Model names to use:\n" + "\n".join(td_common.model_lines(cfg)),
         "--- rules ---\n" + _read(RULES).strip(),
     ]
-    extra = _read(td_common.in_project(root, cfg["handoff_extra"]), EXTRA_MAX).strip()
+    extra_path = td_common.in_project(root, cfg["handoff_extra"])
+    extra = _read(extra_path, EXTRA_MAX).strip()
     if extra:
         parts.append("--- this project's additions ---\n" + extra)
+        pinned = td_common.pinned_model_names(extra_path, root)
+        if pinned:
+            parts.append(PINNED % "; ".join("%s in %s" % (n, p) for p, n in pinned[:6]))
     return "\n\n".join(parts)
 
 

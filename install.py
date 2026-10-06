@@ -77,9 +77,6 @@ def save_settings(path, data):
 
 
 OURS = ("on_prompt.py",)
-OLD = ("session_guard.py", "usage_meter.py", "savings_note.py")  # v1 scripts, removed in v2
-OLD_NAME = "token-diet"                 # this project's name until 2026-10-05
-OLD_KEY = "_tokenDietPreviousStatusLine"
 KEY = "_chatWeightPreviousStatusLine"
 
 
@@ -87,7 +84,7 @@ def _from_us(command):
     """True when a command runs a script from a chat-weight folder. A script name alone is
     not proof: other tools ship their own on_prompt.py and statusline.py."""
     command = str(command or "").replace("\\", "/").lower()
-    return ("chat-weight" in command or OLD_NAME in command
+    return ("chat-weight" in command
             or ROOT.replace("\\", "/").lower() in command)
 
 
@@ -101,9 +98,9 @@ def hook_text(h):
 
 
 def is_ours(h):
-    """A hook entry that belongs to chat-weight: this version, or an older one being upgraded."""
+    """A hook entry that belongs to chat-weight: this install, or one from a moved folder."""
     text = hook_text(h)
-    return _from_us(text) and any(s in text for s in OURS + OLD)
+    return _from_us(text) and any(s in text for s in OURS)
 
 
 # ------------------------------------------------------------ running Python
@@ -191,7 +188,7 @@ def extract_unrelated_state(data):
     """Capture all keys and hooks not owned by chat-weight."""
     unrelated_top = {
         k: copy.deepcopy(v) for k, v in data.items()
-        if k not in ("statusLine", "hooks", KEY, OLD_KEY)
+        if k not in ("statusLine", "hooks", KEY)
     }
     unrelated_hooks = {}
     if "hooks" in data and isinstance(data["hooks"], dict):
@@ -272,8 +269,6 @@ def apply_install(data, python_bin, statusline_script, prompt_script, take_statu
     # 1. statusLine. A working one that belongs to someone else stays, unless the user
     #    asks for ours (--statusline); the bar still shows at the end of every reply.
     statusline_cmd = command_line(python_bin, statusline_script)
-    if OLD_KEY in data:                 # saved under the old name: keep it under the new one
-        data.setdefault(KEY, data.pop(OLD_KEY))
     existing = data.get("statusLine")
     theirs_works = isinstance(existing, dict) and bool(existing.get("command")) \
         and not is_our_statusline(existing)
@@ -300,11 +295,8 @@ def apply_install(data, python_bin, statusline_script, prompt_script, take_statu
 
 
 def apply_uninstall(data):
-    saved = [k for k in (KEY, OLD_KEY) if k in data]
-    if saved:
-        data["statusLine"] = data.pop(saved[0])
-        for k in saved[1:]:
-            data.pop(k)
+    if KEY in data:
+        data["statusLine"] = data.pop(KEY)
         print("Restored previous statusLine configuration.")
     elif is_our_statusline(data.get("statusLine")):
         del data["statusLine"]

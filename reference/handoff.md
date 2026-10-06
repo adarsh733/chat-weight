@@ -22,19 +22,24 @@ Nothing else is a reason to write one.
 4. **Facts only.** Say what is proven done and what is not started — no percentages.
    Anything not checked is written as "not verified".
 5. **Pick the model for the next chat's work, not this one's:** top level for thinking, middle
-   for building a plan that is already agreed, small for routine work. Name tool, model and
-   effort together, using the model names chat-weight gives you.
+   for building a plan that is already agreed, small for routine work. Name tool, level, model
+   and effort together: the level first, in words, then the model name chat-weight gives you.
+   **Never a version number** ("Opus 5") — it is wrong the day a newer model ships, and a
+   reader who has never used that version cannot tell. The level stays right even when a new
+   model family arrives.
 6. **The paste block points, it never carries:** topic, absolute path to the note, where to
    start plus tool · model · effort. Three lines, in a code block, so one tap copies it.
 7. If the project has its own additions (shown after these rules, under "this project's
-   additions"), follow them too.
+   additions"), follow them too. They may change which level or tool to use, but rule 5 still
+   holds: if they name a fixed version, use the level and current name instead and tell the
+   user which file pins it.
 
 ## The note
 
 ```
 ▶ NEXT CHAT — SETUP
 Tool:   <tool>
-Model:  <model> (<top | middle | small> level)
+Model:  <top | middle | small> level — <model name, e.g. opus>
 Effort: <High | Medium | Low>
 Why:    <one line: what kind of work comes next>
 
@@ -68,5 +73,5 @@ An empty section says `— none.` rather than disappearing.
 ```
 Continuing: <one sentence: the topic>
 Note: <absolute path to the note>
-Read that note and start at section 4, item 1. <Tool> · <model> · <effort>.
+Read that note and start at section 4, item 1. <Tool> · <level> level (<model>) · <effort>.
 ```
