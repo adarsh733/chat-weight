@@ -7,6 +7,8 @@
    on and, at that safe break, write the handoff (reference/handoff.md).
 3. After that, one short line per message: a nudge until the note exists, then
    a reminder that it does. Nothing is ever blocked.
+4. When a newer chat-weight is out (checked once a day in the background, see
+   scripts/updates.py), asks Claude to say so in one line, once per chat.
 
 Prints nothing and exits 0 on any problem, so it can never break a chat.
 """
@@ -21,6 +23,7 @@ SKILL = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(SKILL, "scripts"))
 
 import td_common  # noqa: E402
+import updates  # noqa: E402
 
 RULES = os.path.join(SKILL, "reference", "handoff.md")
 EXTRA_MAX = 4000
@@ -35,10 +38,13 @@ PINNED = ("[chat-weight] Model names: this project's handoff rules name fixed ve
           "Those go stale when a newer model ships. In this handoff name the level and the "
           "model name from the list above instead, and tell the user in one line which file "
           "pins versions so they can change it.")
+UPDATE = ("[chat-weight] A newer chat-weight is out (%s; this one is %s). Just above the bar "
+          "line, add this exact line once: A chat-weight update is available — say "
+          "\"update chat-weight\". Do not mention it again in later replies.")
 UNREADABLE = ("[chat-weight] chat-weight could not measure this chat: this version of Claude "
               "Code writes its chat log in a way chat-weight does not recognise. At the end of "
               "your reply, tell the user in one line that the chat-weight bar is paused and "
-              "that updating chat-weight (git pull in its folder) should bring it back. Say it "
+              "that saying \"update chat-weight\" should bring it back. Say it "
               "once; do not repeat it in later replies.")
 
 
@@ -115,7 +121,22 @@ def build(data):
         else:
             td_common.write_json(flag, {"at": datetime.now().timestamp() - 1})
             out = [BAR_ABOVE_PASTE % bar, handoff_request(r, cfg, root)]
+    if len(out) == 1:
+        out += update_line(cfg, sid)
     return "\n\n".join(out)
+
+
+def update_line(cfg, sid):
+    """The update notice, once per chat. Never alongside a handoff request or reminder."""
+    try:
+        found = updates.notice(cfg)
+        flag = td_common.state_file("update", sid)
+        if not found or td_common.read_json(flag) is not None:
+            return []
+        td_common.write_json(flag, {"told": found[1]})
+        return [UPDATE % (found[1], found[0])]
+    except Exception:
+        return []
 
 
 def main():

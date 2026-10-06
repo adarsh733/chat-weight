@@ -35,9 +35,14 @@ class Base(unittest.TestCase):
         os.makedirs(os.path.join(self.project, ".git"))
         os.makedirs(self.home)
         self.env = dict(os.environ, HOME=self.home, USERPROFILE=self.home,
-                        CHAT_WEIGHT_STATE=os.path.join(self.tmp, "state"))
+                        CHAT_WEIGHT_STATE=os.path.join(self.tmp, "state"),
+                        CHAT_WEIGHT_UPDATE_URL=self.version_url("missing"))
         os.environ["CHAT_WEIGHT_STATE"] = self.env["CHAT_WEIGHT_STATE"]
+        os.environ["CHAT_WEIGHT_UPDATE_URL"] = self.env["CHAT_WEIGHT_UPDATE_URL"]   # never the network
         self.cfg = td_common.load_config(self.project)
+
+    def version_url(self, name):
+        return "file:///" + os.path.join(self.tmp, name).replace("\\", "/").lstrip("/")
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -360,6 +365,79 @@ class TestHook(Base):
     def test_garbage_in_is_silent_and_safe(self):
         res = subprocess.run([sys.executable, HOOK], input=b"not json", capture_output=True, env=self.env)
         self.assertEqual((res.returncode, res.stdout), (0, b""))
+
+
+class TestUpdates(Base):
+    """A newer version is mentioned once per chat; nothing ever updates by itself."""
+
+    def setUp(self):
+        super().setUp()
+        import updates
+        self.u = updates
+        self.started = []
+
+    def publish(self, version):
+        with open(os.path.join(self.tmp, "VERSION"), "w", encoding="utf-8") as fh:
+            fh.write(version + "\n")
+        os.environ["CHAT_WEIGHT_UPDATE_URL"] = self.env["CHAT_WEIGHT_UPDATE_URL"] = self.version_url("VERSION")
+
+    def test_versions_compare_as_numbers(self):
+        self.assertTrue(self.u.is_newer("2.10.0", "2.9.1"))
+        self.assertTrue(self.u.is_newer("3", "2.9"))
+        self.assertFalse(self.u.is_newer("2.1.0", "2.1"))
+        self.assertFalse(self.u.is_newer("2.0.0", "2.1.0"))     # the author's own copy is ahead
+        self.assertFalse(self.u.is_newer("<html>404", "2.1.0"))  # a broken download says nothing
+
+    def test_fetch_saves_the_newest_and_a_failure_keeps_the_last_answer(self):
+        self.publish("9.0.0")
+        self.assertEqual(self.u.fetch(self.cfg), "9.0.0")
+        os.environ["CHAT_WEIGHT_UPDATE_URL"] = self.version_url("missing")
+        self.assertIsNone(self.u.fetch(self.cfg))
+        self.assertEqual(td_common.read_json(self.u.state_path())["latest"], "9.0.0")
+
+    def test_checks_at_most_once_a_day_and_never_waits(self):
+        start = lambda: self.started.append(1)
+        now = time.time()
+        self.u.notice(self.cfg, now, start)
+        self.u.notice(self.cfg, now + 3600, start)
+        self.assertEqual(len(self.started), 1)
+        self.u.notice(self.cfg, now + 86400, start)
+        self.assertEqual(len(self.started), 2)
+
+    def test_switched_off_checks_nothing(self):
+        self.cfg["check_for_updates"] = False
+        self.assertIsNone(self.u.notice(self.cfg, start=lambda: self.started.append(1)))
+        self.assertEqual(self.started, [])
+
+    def test_hook_says_it_once_per_chat(self):
+        self.publish("99.0.0")
+        self.u.fetch(self.cfg)
+        t = self.chat(reply(START), self.at(20))
+        first = self.hook(t, sid="a")
+        self.assertIn('say "update chat-weight"', first)
+        self.assertIn("99.0.0", first)
+        self.assertNotIn("update chat-weight", self.hook(t, sid="a"))
+        self.assertIn("update chat-weight", self.hook(t, sid="b"))   # a new chat hears it once too
+
+    def test_up_to_date_says_nothing(self):
+        self.publish(self.u.installed())
+        self.u.fetch(self.cfg)
+        self.assertNotIn("update chat-weight", self.hook(self.chat(reply(START), self.at(20))))
+
+    def test_never_mixed_into_a_handoff_request(self):
+        self.publish("99.0.0")
+        self.u.fetch(self.cfg)
+        text = self.hook(self.chat(reply(START), self.at(65)))
+        self.assertIn("HANDOFF", text)
+        self.assertNotIn("update chat-weight", text)
+
+    def test_a_copy_without_git_is_told_how_to_update_not_broken(self):
+        skill = os.path.join(self.tmp, "copy")
+        shutil.copytree(ROOT, skill, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+        res = subprocess.run([sys.executable, os.path.join(skill, "scripts", "updates.py"), "--apply"],
+                             capture_output=True, env=self.env)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(b"Download it again", res.stdout)
 
 
 class TestStatusLine(Base):

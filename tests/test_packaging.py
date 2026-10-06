@@ -14,6 +14,7 @@ PERSONAL = re.compile(r"adarsh|war-mode|war mode|health & medicine|adi20|antigra
 
 
 REPO = "github.com/adarsh733/chat-weight"   # the project's own address is fine
+RAW = "raw.githubusercontent.com/adarsh733/chat-weight"   # ...and where its VERSION file is read
 
 
 def shipped():
@@ -35,12 +36,13 @@ class TestPackaging(unittest.TestCase):
                 continue
             with open(p, encoding="utf-8", errors="replace") as fh:
                 for n, line in enumerate(fh, 1):
-                    if PERSONAL.search(line.replace(REPO, "")):
+                    if PERSONAL.search(line.replace(RAW, "").replace(REPO, "")):
                         hits.append("%s:%d: %s" % (os.path.relpath(p, ROOT), n, line.strip()[:80]))
         self.assertEqual(hits, [])
 
     def test_installer_wires_files_that_ship(self):
-        for rel in ("scripts/statusline.py", "hooks/on_prompt.py", "reference/handoff.md", "config.json"):
+        for rel in ("scripts/statusline.py", "hooks/on_prompt.py", "reference/handoff.md", "config.json",
+                    "VERSION", "scripts/updates.py"):
             self.assertTrue(os.path.isfile(os.path.join(ROOT, rel)), rel)
         src = open(os.path.join(ROOT, "install.py"), encoding="utf-8").read()
         self.assertIn('"scripts", "statusline.py"', src)

@@ -13,6 +13,9 @@ them short:
   Weight is growth since the chat began, against the point where a fresh chat becomes
   cheaper (4× what a fresh chat must re-load). It is not memory. A hook adds the line;
   print it exactly as given and do not comment on it.
+- **Updates.** Once a day a background check looks for a newer chat-weight. If there is
+  one, the hook asks you to say so in one line, once per chat. Nothing updates until the
+  user says "update chat-weight".
 - **The handoff.** Past 60% the hook asks for a handoff once. Never interrupt unfinished
   work: finish the step you are on (an edit and its check are one step), then follow
   `reference/handoff.md`: a short note saved on disk, then a 3-line paste block as the
@@ -24,6 +27,7 @@ them short:
 |---|---|
 | "write a handoff", "new chat", "continue in a fresh chat" | Follow `reference/handoff.md` now, at any fullness |
 | "where did my tokens go", "why did I hit my limit", "audit my usage" | Run `python <this folder>/scripts/audit.py` (add `--all` for every project) and explain the result in plain words |
+| "update chat-weight" | Run `python <this folder>/scripts/updates.py --apply` and tell the user in plain words what it printed. Only when the user asks: never update on your own |
 | "how heavy is this chat" | Read the last bar line; no need to run anything |
 | "hand off later / sooner" or other settings | Put the key in `~/.claude/chat-weight/config.json` (all projects) or `<project>/.claude/chat-weight.json` (one project). Never edit this folder's `config.json` |
 

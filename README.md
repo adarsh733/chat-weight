@@ -126,7 +126,8 @@ hollow. If yours draws ⬜ well, set `"statusline_empty": "⬜"` in your config.
 
 - Preview without changing anything: `python install.py --dry-run`
 - Remove it: `python install.py --uninstall` (your old status bar comes back if you had one)
-- Upgrading: `git pull` in this folder, then run `install.py` again. Old entries are cleaned up.
+- Upgrading: say "update chat-weight" to Claude, or run `git pull` in this folder and then
+  `install.py` again. Old entries are cleaned up.
 - Moved or upgraded Python? Run `install.py` again so the hook points at the new one.
 - To remove every trace: uninstall, then delete this folder and chat-weight's small notes
   folder, `~/.claude/chat-weight/`. Notes from chats older than 30 days are cleared
@@ -171,6 +172,23 @@ A handoff never names a version number like "Opus 5": that is out of date the da
 model ships. The level comes first, in words, so the note still reads right when a whole
 new model family appears. If your project's own handoff rules (`handoff_extra`, or a file it
 links to) pin a version, the handoff uses the level instead and tells you which file to fix.
+
+## Updates
+
+Once a day, in the background, chat-weight downloads one small public file (`VERSION`) from
+this GitHub page to see if a newer version is out. Nothing about you is sent, and your chat
+never waits for it. If there is a newer version, Claude adds one line to a reply, once per
+chat:
+
+```
+A chat-weight update is available — say "update chat-weight".
+```
+
+Say it, and Claude runs `python scripts/updates.py --apply`: `git pull` in this folder, then
+`install.py` again. It never updates by itself. That is on purpose: if this GitHub account
+were ever taken over, silent updates would put bad code on every machine without anyone
+noticing. To see where you stand, run `python scripts/updates.py --status`. To stop the
+check, set `"check_for_updates": false` in your config.
 
 ## Honest limits
 
