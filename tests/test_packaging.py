@@ -19,7 +19,7 @@ RAW = "raw.githubusercontent.com/adarsh733/chat-weight"   # ...and where its VER
 
 def shipped():
     for d, dirs, files in os.walk(ROOT):
-        dirs[:] = [x for x in dirs if x not in (".git", "__pycache__", ".pytest_cache")]
+        dirs[:] = [x for x in dirs if x not in (".git", "__pycache__", ".pytest_cache", "dist")]
         for f in files:
             yield os.path.join(d, f)
 
@@ -42,7 +42,7 @@ class TestPackaging(unittest.TestCase):
 
     def test_installer_wires_files_that_ship(self):
         for rel in ("scripts/statusline.py", "hooks/on_prompt.py", "reference/handoff.md", "config.json",
-                    "VERSION", "scripts/updates.py"):
+                    "VERSION", "scripts/updates.py", "reference/chat-mode.md", "scripts/package.py"):
             self.assertTrue(os.path.isfile(os.path.join(ROOT, rel)), rel)
         src = open(os.path.join(ROOT, "install.py"), encoding="utf-8").read()
         self.assertIn('"scripts", "statusline.py"', src)
@@ -57,6 +57,17 @@ class TestPackaging(unittest.TestCase):
             text = open(os.path.join(ROOT, doc), encoding="utf-8").read()
             for rel in re.findall(r"(?:scripts|hooks|reference)/[\w./-]+\.(?:py|md)", text):
                 self.assertTrue(os.path.isfile(os.path.join(ROOT, rel)), "%s names %s" % (doc, rel))
+
+    def test_chat_zip_holds_the_skill_and_nothing_extra(self):
+        import zipfile
+        res = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "package.py")],
+                             capture_output=True, cwd=ROOT)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        with zipfile.ZipFile(os.path.join(ROOT, "dist", "chat-weight.zip")) as z:
+            names = z.namelist()
+        for rel in ("SKILL.md", "reference/handoff.md", "reference/chat-mode.md", "config.json"):
+            self.assertIn("chat-weight/" + rel, names)
+        self.assertFalse([n for n in names if "/tests/" in n or "/.git" in n or n.endswith(".pyc")], names)
 
     def test_audit_runs_with_no_history(self):
         env = dict(os.environ, HOME=ROOT + "-nohome", USERPROFILE=ROOT + "-nohome")

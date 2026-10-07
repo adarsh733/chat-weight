@@ -37,7 +37,8 @@
       "small":  {"for": "routine: renaming, moving files, docs, running tests", "effort": "Low"}
     },
     "tools": {
-      "Claude Code": {"top": "opus", "middle": "sonnet", "small": "haiku", "names_stay_current": true}
+      "Claude Code": {"top": "opus", "middle": "sonnet", "small": "haiku", "names_stay_current": true},
+      "Claude chat": {"top": "the newest Opus", "middle": "the newest Sonnet", "small": "the newest Haiku", "names_stay_current": true}
     },
     "_add_a_tool": "To add another tool, add a line like  \"Codex\": {\"top\": \"<model>\", \"middle\": \"<model>\", \"small\": \"<model>\"}  and update \"checked\". Names in a tool without names_stay_current get '(or newer)' added once 'checked' is over 90 days old."
   }

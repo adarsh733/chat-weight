@@ -10,6 +10,9 @@ A handoff saves what matters in a short note, and a fresh chat picks up from the
 
 Nothing else is a reason to write one.
 
+**In a normal chat** (no hooks, no files on the user's computer), the rules below still hold,
+except where the note goes: see `reference/chat-mode.md`, "The handoff in a chat".
+
 ## Rules
 
 1. **Never interrupt unfinished work.** An edit and the check that proves it are one step.

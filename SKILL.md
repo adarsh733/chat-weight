@@ -1,12 +1,23 @@
 ---
 name: chat-weight
-description: Keeps Claude Code chats short and cheap. Shows the chat's weight after every reply, and at 60% writes a handoff note so the work continues in a fresh chat. Use when the user asks for a handoff, a fresh or new chat, chat weight, how heavy or long the chat is, where their tokens or usage went, or why they hit their limit.
+description: Keeps Claude chats short and cheap, in Claude Code and in normal chats. Shows how heavy the chat is, and near the fresh-chat point writes a handoff note so the work continues in a fresh chat. Use when the user asks for a handoff, a fresh or new chat, chat weight, how heavy or long the chat is, where their tokens or usage went, or why they hit their limit.
 ---
 
 # chat-weight
 
 Long chats are expensive because every reply re-reads the whole chat. chat-weight keeps
-them short:
+them short. It works in two places, and you decide which one you are in:
+
+- **Claude Code** — a `[chat-weight]` line arrives with the user's messages, or you have
+  tools that run commands on the user's own computer. Follow this file.
+- **A normal chat** (claude.ai on the web, the desktop app's chat, the phone apps) — neither
+  of those. There are no hooks and no logs to read, so follow `reference/chat-mode.md`
+  instead: same idea, your own estimate, the handoff written into the reply.
+
+In Claude Code with no `[chat-weight]` line at all, chat-weight is not switched on yet: say
+in one line that `python install.py` in this folder turns it on.
+
+## Claude Code
 
 - **Chat weight.** Every reply ends with a line like
   `🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜  🟢 chat weight 24% — fresh chat at 60% — all good`.
@@ -21,7 +32,7 @@ them short:
   `reference/handoff.md`: a short note saved on disk, then a 3-line paste block as the
   last thing in the reply.
 
-## When the user asks
+## When the user asks (Claude Code)
 
 | They say | Do |
 |---|---|
@@ -36,10 +47,14 @@ them short:
 Name the **level** the next chat's work needs first, in words (top for thinking,
 middle for building an agreed plan, small for routine work), then the model name for that
 level. In Claude Code use `opus`, `sonnet` and `haiku`: Claude Code points these at the
-newest model of each kind, so they never go out of date. Other tools' names come from
+newest model of each kind, so they never go out of date. In a normal chat use the family
+name from the model menu ("the newest Opus"). Other tools' names come from
 `config.json` → `models`. **Never write a version number** ("Opus 5"), even when the
 project's own rules do — the hook flags those files so the user can fix them.
 
 ## Install
 
-`python install.py` from this folder. Never hand-edit `~/.claude/settings.json` for it.
+- **Claude Code:** `python install.py` from this folder. Never hand-edit
+  `~/.claude/settings.json` for it.
+- **Normal chats:** `python scripts/package.py` makes `chat-weight.zip`; upload it where
+  skills are added in the app's settings. Nothing else to set up.

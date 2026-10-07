@@ -67,9 +67,11 @@ that chat:
 
 The bar reads 60% at that point. The last 40% is room to finish what you're doing.
 
-## Terminal and desktop app
+## Where it works
 
-Both work, using the same install.
+One skill, and Claude works out on its own where it is running.
+
+**Claude Code** — terminal and desktop app, using the same install:
 
 - **Terminal (`claude`):** the bar shows at the end of every reply and in the status line at
   the bottom of the screen.
@@ -77,6 +79,19 @@ Both work, using the same install.
   at the end of every reply. The handoff works the same way.
 
 Each message costs about 0.2 seconds of local work, even on a 65 MB chat log.
+
+**Normal chats** — claude.ai on the web, the desktop app's chat, the phone apps. A chat has no
+hooks and no log to read, so there is no exact meter. Instead Claude estimates the chat's size
+itself:
+
+- No bar on every reply. Claude says one line when the chat reaches about 40% ("wrap up soon")
+  and about 60% ("say *write a handoff*"), and shows the bar, marked as an estimate (≈), when
+  you ask "how heavy is this chat?".
+- The handoff note comes in the reply, in one block you copy into a new chat (a chat can't
+  save files on your computer).
+- The usage report needs Claude Code's logs, so it is Claude Code only.
+
+The rules Claude follows in a chat are in [`reference/chat-mode.md`](reference/chat-mode.md).
 
 ## Install
 
@@ -97,6 +112,16 @@ python "$HOME\.claude\skills\chat-weight\install.py"
 ```
 
 Then open a new chat. That's it.
+
+**Normal chats (claude.ai and the Claude apps)**
+
+```bash
+python scripts/package.py
+```
+
+This makes `dist/chat-weight.zip`. Upload it where skills are added in the Claude app's
+settings. Nothing else to set up. To update, make a new zip and upload it again in place of the
+old one.
 
 **Or ask Claude to do it.** Paste this into Claude Code:
 
@@ -198,7 +223,8 @@ check, set `"check_for_updates": false` in your config.
   effect on your plan's limit may be smaller.
 - The bar at the end of each reply is itself a few dozen tokens per reply. That is small
   next to what it saves, but it is not zero.
-- Only Claude Code is measured today.
+- Only Claude Code is measured. In a normal chat the weight is Claude's own estimate, so it can
+  be off by a fair amount.
 - chat-weight reads Claude Code's own chat log. If a future Claude Code changes that log's
   format, the bar does not show a wrong number: it says it is paused, once, and asks you to
   update chat-weight.
