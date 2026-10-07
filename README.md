@@ -98,7 +98,7 @@ The rules Claude follows in a chat are in [`reference/chat-mode.md`](reference/c
 
 ## Install
 
-You need Claude Code, git and Python 3.8 or newer.
+For Claude Code you need git and Python 3.8 or newer.
 
 **Mac / Linux**
 
@@ -118,13 +118,14 @@ Then open a new chat. That's it.
 
 **Normal chats (claude.ai and the Claude apps)**
 
-```bash
-python scripts/package.py
-```
+No Python or git needed:
 
-This makes `dist/chat-weight.zip`. Upload it where skills are added in the Claude app's
-settings. Nothing else to set up. To update, make a new zip and upload it again in place of the
-old one.
+1. Download [chat-weight.zip](https://github.com/adarsh733/chat-weight/releases/latest/download/chat-weight.zip).
+2. In Claude, open Settings → Capabilities → Skills, and upload it.
+3. Open a new chat. The bar appears at the end of the first reply.
+
+To update, download the zip again and upload it in place of the old one. To build the zip
+yourself from this folder, run `python scripts/package.py` (it makes `dist/chat-weight.zip`).
 
 **Or ask Claude to do it.** Paste this into Claude Code:
 
