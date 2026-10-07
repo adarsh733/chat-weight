@@ -81,14 +81,17 @@ One skill, and Claude works out on its own where it is running.
 Each message costs about 0.2 seconds of local work, even on a 65 MB chat log.
 
 **Normal chats** — claude.ai on the web, the desktop app's chat, the phone apps. A chat has no
-hooks and no log to read, so there is no exact meter. Instead Claude estimates the chat's size
-itself:
+hooks and no log to read, so nothing measures it. Claude keeps the count itself:
 
-- No bar on every reply. Claude says one line when the chat reaches about 40% ("wrap up soon")
-  and about 60% ("say *write a handoff*"), and shows the bar, marked as an estimate (≈), when
-  you ask "how heavy is this chat?".
-- The handoff note comes in the reply, in one block you copy into a new chat (a chat can't
-  save files on your computer).
+- The same bar ends every reply, marked `≈` because it is counted, not measured:
+  `🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜  🟢 chat weight ≈30% — fresh chat at 60% — all good`
+- It is a running tally. Each reply reads the last bar's number and adds what that turn cost
+  (1% ≈ 2,000 tokens): +1 for a normal message and reply, more for long replies, pasted text,
+  files, images and web searches. So the bar moves steadily and never jumps back.
+- 60% is the same point as in Claude Code: about 120,000 tokens of growth.
+- At 60% Claude finishes its step and writes the handoff once. The note comes in the reply, in
+  one block you copy into a new chat (a chat can't save files on your computer), and it names
+  the old chat so the new one can look back at it.
 - The usage report needs Claude Code's logs, so it is Claude Code only.
 
 The rules Claude follows in a chat are in [`reference/chat-mode.md`](reference/chat-mode.md).
@@ -223,8 +226,8 @@ check, set `"check_for_updates": false` in your config.
   effect on your plan's limit may be smaller.
 - The bar at the end of each reply is itself a few dozen tokens per reply. That is small
   next to what it saves, but it is not zero.
-- Only Claude Code is measured. In a normal chat the weight is Claude's own estimate, so it can
-  be off by a fair amount.
+- Only Claude Code is measured. In a normal chat the weight is Claude's own count, so it can be
+  off by about a quarter either way, more in chats full of big files.
 - chat-weight reads Claude Code's own chat log. If a future Claude Code changes that log's
   format, the bar does not show a wrong number: it says it is paused, once, and asks you to
   update chat-weight.

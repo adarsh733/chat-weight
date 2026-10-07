@@ -12,7 +12,8 @@ them short. It works in two places, and you decide which one you are in:
   tools that run commands on the user's own computer. Follow this file.
 - **A normal chat** (claude.ai on the web, the desktop app's chat, the phone apps) — neither
   of those. There are no hooks and no logs to read, so follow `reference/chat-mode.md`
-  instead: same idea, your own estimate, the handoff written into the reply.
+  instead: the same bar on every reply, kept as your own running tally and marked `≈`, and
+  the handoff written into the reply.
 
 In Claude Code with no `[chat-weight]` line at all, chat-weight is not switched on yet: say
 in one line that `python install.py` in this folder turns it on.
