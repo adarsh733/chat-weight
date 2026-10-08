@@ -21,9 +21,9 @@ counts the cost of every fresh chat re-loading what it needs.
 ```
 
 Weight is how much the chat has grown since it started, compared with the point where
-starting fresh becomes cheaper. It is measured once, after Claude has finished the reply,
-so it includes everything that reply did, however many steps it took. In Claude Code the
-bar is shown by Claude Code itself, not written by the AI, so it costs no tokens at all. It is not how full the model's memory is: today's big
+starting fresh becomes cheaper. It is measured each time you send a message, and the AI
+ends its reply with it, so the bar sits inside the reply (a few tokens per reply). A new
+chat reads 0% until it has grown. It is not how full the model's memory is: today's big
 models can hold a million tokens, and a chat gets expensive long before it fills that.
 The terminal also shows the bar at the bottom of the screen, which is free because it
 never reaches the AI.

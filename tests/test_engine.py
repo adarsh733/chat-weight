@@ -74,11 +74,9 @@ class Base(unittest.TestCase):
             spec = payload["hookSpecificOutput"]
             self.assertEqual(spec["hookEventName"], event)
             return spec["additionalContext"]
-        if payload.get("decision") == "block":       # Stop held open: Claude continues
-            self.assertEqual(event, "Stop")
-            return "BLOCK " + payload["reason"]
-        self.assertEqual(event, "Stop")              # a line shown to the user, not to Claude
-        return "SHOWN " + payload["systemMessage"]
+        self.assertEqual(payload.get("decision"), "block")  # Stop held open: Claude continues
+        self.assertEqual(event, "Stop")
+        return "BLOCK " + payload["reason"]
 
     def step(self, transcript, **extra):
         """The hook as Claude Code runs it after one of Claude's steps (a tool call)."""
@@ -295,20 +293,19 @@ class TestModels(Base):
 
 
 class TestHook(Base):
-    def test_the_bar_is_shown_once_after_the_reply_and_never_sent_to_claude(self):
+    def test_each_message_asks_claude_to_end_the_reply_with_the_bar(self):
         t = self.chat(reply(START), self.at(20))
-        self.assertEqual(self.hook(t), "")                      # sending a message: silent
-        text = self.done(t)
-        self.assertTrue(text.startswith("SHOWN "), text)        # shown to the user directly
+        text = self.hook(t)
+        self.assertIn("End your reply with this exact line", text)
         self.assertIn("chat weight 20%", text)
-        self.assertNotIn("***", text)
         self.assertNotIn("HANDOFF", text)
+        self.assertEqual(self.done(t), "")                      # nothing extra after the reply
 
     def test_first_reply_shows_an_empty_bar(self):
-        self.assertIn("chat weight 0%", self.done(self.chat()))
+        self.assertIn("chat weight 0%", self.hook(self.chat()))
 
     def test_a_chat_with_no_log_yet_still_shows_the_bar(self):
-        self.assertIn("chat weight 0%", self.done(os.path.join(self.tmp, "not-written-yet.jsonl")))
+        self.assertIn("chat weight 0%", self.hook(os.path.join(self.tmp, "not-written-yet.jsonl")))
 
     def test_past_the_line_asks_for_the_handoff_with_rules_and_models(self):
         text = self.hook(self.chat(reply(START), self.at(65)))
@@ -316,6 +313,8 @@ class TestHook(Base):
         self.assertIn("NEXT CHAT — SETUP", text)          # the rules file travels with it
         self.assertIn("Claude Code: top = opus", text)
         self.assertIn(os.path.join(self.project, ".claude", "handoffs"), text)
+        self.assertIn("just above the paste block", text)      # the bar never ends a handoff
+        self.assertIn("chat weight 65%", text)
 
     def write_note(self, name):
         folder = os.path.join(self.project, ".claude", "handoffs")
@@ -407,23 +406,25 @@ class TestHook(Base):
     def test_an_unreadable_log_is_said_once_then_silence(self):
         new = {"type": "assistant", "message": {"model": "claude-opus-9", "tokenCounts": {"prompt": 1}}}
         t = self.chat(new)
+        self.assertIn("bar is paused", self.hook(t))
         self.assertEqual(self.hook(t), "")
-        self.assertIn("chat-weight is paused", self.done(t))
         self.assertEqual(self.done(t), "")
 
-    def test_the_bar_counts_the_work_the_reply_did(self):
+    def test_the_next_message_counts_the_work_the_last_reply_did(self):
         t = self.chat(reply(START), self.at(10))
-        self.assertEqual(self.hook(t), "")                      # message sent at 10%
+        self.assertIn("chat weight 10%", self.hook(t))          # message sent at 10%
         self.grow(t, 25)                                        # Claude works: the chat grows
         self.assertEqual(self.step(t), "")                      # steps below the line: silent
-        self.assertIn("chat weight 25%", self.done(t))          # the bar is taken after the work
+        self.assertEqual(self.done(t), "")
+        self.assertIn("chat weight 25%", self.hook(t))
 
     def test_one_bar_per_reply_however_many_steps(self):
         t = self.chat(reply(START), self.at(10))
+        self.assertEqual(self.hook(t).count("chat weight"), 1)
         for pct in (12, 15, 19):
             self.grow(t, pct)
             self.assertEqual(self.step(t), "")
-        self.assertEqual(self.done(t).count("chat weight"), 1)
+        self.assertEqual(self.done(t), "")
 
     def test_a_reply_that_ends_past_the_line_writes_the_handoff_right_away(self):
         t = self.chat(reply(START), self.at(50))
@@ -432,10 +433,11 @@ class TestHook(Base):
         self.assertTrue(first.startswith("BLOCK "), first[:80])   # Claude continues: the handoff
         self.assertIn("--- rules ---", first)
         self.grow(t, 64)
-        last = self.done(t, stop_hook_active=True)
-        self.assertIn("chat weight 64%", last)                  # then the bar, once
-        self.assertNotIn("HANDOFF", last)
-        self.assertNotIn("HANDOFF", self.done(t))               # never asked twice
+        self.assertEqual(self.done(t, stop_hook_active=True), "")
+        self.assertEqual(self.done(t), "")                      # never asked twice
+        nxt = self.hook(t)
+        self.assertIn("chat weight 64%", nxt)
+        self.assertNotIn("--- rules ---", nxt)
 
     def test_a_long_run_that_crosses_the_line_asks_for_the_handoff_mid_run_once(self):
         t = self.chat(reply(START), self.at(30))
@@ -445,8 +447,8 @@ class TestHook(Base):
         self.assertIn("--- rules ---", first)
         self.grow(t, 64)
         self.assertEqual(self.step(t), "")
-        self.assertIn("chat weight 64%", self.done(t))
-        self.assertNotIn("HANDOFF", self.done(t))
+        self.assertEqual(self.done(t), "")
+        self.assertNotIn("--- rules ---", self.hook(t))
 
     def test_a_helper_agents_events_are_left_alone(self):
         t = self.chat(reply(START), self.at(65))
@@ -504,22 +506,22 @@ class TestUpdates(Base):
         self.publish("99.0.0")
         self.u.fetch(self.cfg)
         t = self.chat(reply(START), self.at(20))
-        first = self.done(t, sid="a")
+        first = self.hook(t, sid="a")
         self.assertIn('say "update chat-weight"', first)
         self.assertIn("99.0.0", first)
-        self.assertIn("chat weight 20%", first)                     # under the bar, same line set
-        self.assertNotIn("update chat-weight", self.done(t, sid="a"))
-        self.assertIn("update chat-weight", self.done(t, sid="b"))   # a new chat hears it once too
+        self.assertIn("chat weight 20%", first)                     # just above the bar
+        self.assertNotIn("update chat-weight", self.hook(t, sid="a"))
+        self.assertIn("update chat-weight", self.hook(t, sid="b"))   # a new chat hears it once too
 
     def test_up_to_date_says_nothing(self):
         self.publish(self.u.installed())
         self.u.fetch(self.cfg)
-        self.assertNotIn("update chat-weight", self.done(self.chat(reply(START), self.at(20))))
+        self.assertNotIn("update chat-weight", self.hook(self.chat(reply(START), self.at(20))))
 
     def test_never_mixed_into_a_handoff_request(self):
         self.publish("99.0.0")
         self.u.fetch(self.cfg)
-        text = self.done(self.chat(reply(START), self.at(65)))
+        text = self.hook(self.chat(reply(START), self.at(65)))
         self.assertIn("HANDOFF", text)
         self.assertNotIn("update chat-weight", text)
 

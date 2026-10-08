@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """chat-weight's one hook script. Claude Code runs it at three moments:
 
-- Stop (Claude has finished its reply): measures the chat now that the work is done
-  and shows the bar under the reply, once. Claude Code shows it to the user directly,
-  so the bar costs no tokens. A newer chat-weight is mentioned here too, once per chat.
-- Past 60%, asks Claude, once, for the handoff. At Stop that happens right after the
-  reply; during a long run (PostToolUse, after each of Claude's steps) it happens as
-  soon as the line is crossed, and Claude finishes the step it is on first.
-- UserPromptSubmit (the user sends a message): silent, except after a handoff was
-  asked for: a nudge until the note exists, then a reminder that it does.
+- UserPromptSubmit (the user sends a message): measures the chat and asks Claude to end
+  its reply with the bar, so the bar sits inside the reply in every Claude Code window.
+  A newer chat-weight is mentioned here too, once per chat, just above the bar.
+- Past 60%, asks Claude, once, for the handoff: with the message that crosses the line,
+  during a long run (PostToolUse, after each of Claude's steps) as soon as the line is
+  crossed, or right after a reply that crossed it (Stop). Claude finishes the step it
+  is on first. After that, one short line per message: a nudge until the note exists,
+  then a reminder that it does.
+- Otherwise steps and the end of a reply are silent.
 
 Prints nothing and exits 0 on any problem, so it can never break a chat.
 """
@@ -28,6 +29,10 @@ import updates  # noqa: E402
 RULES = os.path.join(SKILL, "reference", "handoff.md")
 EXTRA_MAX = 4000
 
+BAR = ("[chat-weight] End your reply with this exact line, on its own line, after all "
+       "other text. Do not comment on it:\n\n%s")
+BAR_ABOVE_PASTE = ("[chat-weight] Put this exact line on its own line just above the paste "
+                   "block, which stays the very last thing. Do not comment on it:\n\n%s")
 NUDGE = ("[chat-weight] Still no handoff note, and chat weight is %d%%. At the next safe "
          "break, write it as %s says.")
 WRITTEN = ("[chat-weight] The handoff note is written: %s. If the user carries on here, help "
@@ -36,9 +41,14 @@ PINNED = ("[chat-weight] Model names: this project's handoff rules name fixed ve
           "Those go stale when a newer model ships. In this handoff name the level and the "
           "model name from the list above instead, and tell the user in one line which file "
           "pins versions so they can change it.")
-UPDATE = "A chat-weight update is available (%s) — say \"update chat-weight\"."
-PAUSED = ("chat-weight is paused: this version of Claude Code writes its chat log in a way "
-          "chat-weight does not recognise. Say \"update chat-weight\" to bring the bar back.")
+UPDATE = ("[chat-weight] Just above the bar line, add this exact line once: A chat-weight "
+          "update is available (%s) — say \"update chat-weight\". Do not mention it again "
+          "in later replies.")
+PAUSED = ("[chat-weight] chat-weight could not measure this chat: this version of Claude "
+          "Code writes its chat log in a way chat-weight does not recognise. At the end of "
+          "your reply, tell the user in one line that the chat-weight bar is paused and that "
+          "saying \"update chat-weight\" should bring it back. Say it once; do not repeat it "
+          "in later replies.")
 
 
 def _read(path, limit=None):
@@ -79,6 +89,8 @@ def handoff_request(r, cfg, root):
         "Never interrupt unfinished work: an edit and the check that proves it are one step. "
         "Finish the step you are on, start nothing new, and at that safe break write the "
         "handoff exactly as these rules say. Save the note as:\n  %s" % note,
+        "If you were asked to end the reply with the chat-weight bar, put that line just "
+        "above the paste block instead: the paste block stays the very last thing.",
         "Model names to use:\n" + "\n".join(td_common.model_lines(cfg)),
         "--- rules ---\n" + _read(RULES).strip(),
     ]
@@ -103,31 +115,35 @@ def build(data):
     r = td_common.measure(data.get("transcript_path"), sid, cfg)
     if r["unreadable"]:
         flag = td_common.state_file("unreadable", sid)
-        if event != "Stop" or td_common.read_json(flag) is not None:
+        if event != "UserPromptSubmit" or td_common.read_json(flag) is not None:
             return None
         td_common.write_json(flag, {"told": True})
-        return {"systemMessage": PAUSED}
+        return context(event, PAUSED)
     if not r["measured"]:
         r = dict(r, pct=0)               # no chat log yet: a brand-new chat weighs 0%
     root = td_common.project_root(cwd)
     flag = td_common.state_file("handoff", sid)
     asked = td_common.read_json(flag) or {}
     past_line = r["pct"] >= int(cfg["fresh_chat_pct"])
+    bar = td_common.bar_line(r["pct"], cfg)
     if past_line and not asked.get("at") and not data.get("stop_hook_active"):
         td_common.write_json(flag, {"at": datetime.now().timestamp() - 1})
         text = handoff_request(r, cfg, root)
         if event == "Stop":              # the reply is finished: write the handoff now
             return {"decision": "block", "reason": text}
+        if event == "UserPromptSubmit":
+            text = BAR_ABOVE_PASTE % bar + "\n\n" + text
         return context(event, text)
-    if event == "Stop":
-        lines = [td_common.bar_line(r["pct"], cfg).replace("***", "")]
-        lines += update_line(cfg, sid)
-        return {"systemMessage": "\n".join(lines)}
-    if event == "UserPromptSubmit" and asked.get("at") and past_line:
+    if event != "UserPromptSubmit":
+        return None                      # steps and the end of a reply: silent
+    out = [BAR % bar]
+    if asked.get("at") and past_line:
         folder = td_common.in_project(root, cfg["handoff_folder"])
         note = note_from_this_chat(folder, asked["at"], data.get("transcript_path"))
-        return context(event, WRITTEN % note if note else NUDGE % (r["pct"], RULES))
-    return None
+        out.append(WRITTEN % note if note else NUDGE % (r["pct"], RULES))
+    else:
+        out += update_line(cfg, sid)
+    return context(event, "\n\n".join(out))
 
 
 def context(event, text):
@@ -135,7 +151,7 @@ def context(event, text):
 
 
 def update_line(cfg, sid):
-    """The update notice, once per chat, under the bar."""
+    """The update notice, once per chat, just above the bar. Never alongside a handoff."""
     try:
         found = updates.notice(cfg)
         flag = td_common.state_file("update", sid)

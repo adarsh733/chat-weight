@@ -23,18 +23,19 @@ are unsure, it is a normal chat.
 
 ## Claude Code
 
-- **The bar is not yours to print.** When you finish a reply, Claude Code measures the chat
-  (after all the reply's work) and shows the bar under it, once:
+- **The bar comes from the hook.** Each time the user sends a message, a `[chat-weight]`
+  line hands you the bar, measured at that moment:
   `🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜  🟢 chat weight 24% — fresh chat at 60% — all good`.
-  It goes straight to the user, so it costs no tokens and you never see it. Never draw a
-  bar yourself in Claude Code. Weight is growth since the chat began, against the point
-  where a fresh chat becomes cheaper (4× what a fresh chat must re-load). It is not memory.
+  End your reply with that exact line and never comment on it. Never make up a bar or
+  change its number: no `[chat-weight]` line, no bar. Weight is growth since the chat
+  began, against the point where a fresh chat becomes cheaper (4× what a fresh chat must
+  re-load). It is not memory. A new chat reads 0% until it has grown.
 - **"I don't see the bar."** Look at `~/.claude/settings.json`. If it mentions
   `chat-weight` and `on_prompt.py`, it is installed: tell them "Open a new chat to see the
   bar." If not, it is not installed: run `python install.py` in this folder (`python3` on
   Mac and Linux), then tell them "Open a new chat to see the bar."
 - **Updates.** Once a day a background check looks for a newer chat-weight. If there is
-  one, a line under the bar says so, once per chat. Nothing updates until the user says
+  one, a line just above the bar says so, once per chat. Nothing updates until the user says
   "update chat-weight".
 - **The handoff.** Past 60%, a `[chat-weight] HANDOFF` message asks for it, once: right
   after a reply that crossed the line, or mid-run if a long task crosses it. Never interrupt
@@ -52,7 +53,7 @@ Commands below say `python`; on Mac and Linux use `python3`.
 | "write a handoff", "new chat", "continue in a fresh chat" | Follow `reference/handoff.md` now, at any fullness |
 | "where did my tokens go", "why did I hit my limit", "audit my usage" | Run `python <this folder>/scripts/audit.py` (add `--all` for every project) and explain the result in plain words |
 | "update chat-weight" | Run `python <this folder>/scripts/updates.py --apply` and tell the user in plain words what it printed, including "open a new chat to use the new version". Only when the user asks: never update on your own |
-| "how heavy is this chat" | Point them at the bar under your last reply; no need to run anything |
+| "how heavy is this chat" | Point them at the bar at the end of your last reply; no need to run anything |
 | "hand off later / sooner" or other settings | Put the key in `~/.claude/chat-weight/config.json` (all projects) or `<project>/.claude/chat-weight.json` (one project). Never edit this folder's `config.json` |
 
 ## Model names in a handoff
