@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Runs each time the user sends a message (Claude Code UserPromptSubmit hook).
+"""chat-weight's one hook script. Claude Code runs it at three moments:
 
-1. Asks Claude to end its reply with the progress bar, so the bar shows in every
-   Claude Code window, including ones that draw no status line.
-2. Once chat weight passes 60%, asks Claude, once, to finish the step it is
-   on and, at that safe break, write the handoff (reference/handoff.md).
-3. After that, one short line per message: a nudge until the note exists, then
-   a reminder that it does. Nothing is ever blocked.
-4. When a newer chat-weight is out (checked once a day in the background, see
-   scripts/updates.py), asks Claude to say so in one line, once per chat.
+- Stop (Claude has finished its reply): measures the chat now that the work is done
+  and shows the bar under the reply, once. Claude Code shows it to the user directly,
+  so the bar costs no tokens. A newer chat-weight is mentioned here too, once per chat.
+- Past 60%, asks Claude, once, for the handoff. At Stop that happens right after the
+  reply; during a long run (PostToolUse, after each of Claude's steps) it happens as
+  soon as the line is crossed, and Claude finishes the step it is on first.
+- UserPromptSubmit (the user sends a message): silent, except after a handoff was
+  asked for: a nudge until the note exists, then a reminder that it does.
 
 Prints nothing and exits 0 on any problem, so it can never break a chat.
 """
@@ -28,24 +28,17 @@ import updates  # noqa: E402
 RULES = os.path.join(SKILL, "reference", "handoff.md")
 EXTRA_MAX = 4000
 
-BAR = ("[chat-weight] End your reply with this exact line, on its own line, after all "
-       "other text. Do not comment on it:\n\n%s")
-BAR_ABOVE_PASTE = ("[chat-weight] Put this exact line on its own line just above the paste "
-                   "block, which stays the very last thing. Do not comment on it:\n\n%s")
 NUDGE = ("[chat-weight] Still no handoff note, and chat weight is %d%%. At the next safe "
          "break, write it as %s says.")
+WRITTEN = ("[chat-weight] The handoff note is written: %s. If the user carries on here, help "
+           "them, but remind them in one line that a fresh chat with the paste block is cheaper.")
 PINNED = ("[chat-weight] Model names: this project's handoff rules name fixed versions (%s). "
           "Those go stale when a newer model ships. In this handoff name the level and the "
           "model name from the list above instead, and tell the user in one line which file "
           "pins versions so they can change it.")
-UPDATE = ("[chat-weight] A newer chat-weight is out (%s; this one is %s). Just above the bar "
-          "line, add this exact line once: A chat-weight update is available — say "
-          "\"update chat-weight\". Do not mention it again in later replies.")
-UNREADABLE = ("[chat-weight] chat-weight could not measure this chat: this version of Claude "
-              "Code writes its chat log in a way chat-weight does not recognise. At the end of "
-              "your reply, tell the user in one line that the chat-weight bar is paused and "
-              "that saying \"update chat-weight\" should bring it back. Say it "
-              "once; do not repeat it in later replies.")
+UPDATE = "A chat-weight update is available (%s) — say \"update chat-weight\"."
+PAUSED = ("chat-weight is paused: this version of Claude Code writes its chat log in a way "
+          "chat-weight does not recognise. Say \"update chat-weight\" to bring the bar back.")
 
 
 def _read(path, limit=None):
@@ -56,16 +49,24 @@ def _read(path, limit=None):
         return ""
 
 
-def newest_note_since(folder, since):
-    best, best_t = None, since
+def note_from_this_chat(folder, since, transcript_path):
+    """The newest note written after the handoff was asked for AND named in this chat's
+    own log. Another chat in the same project can write its own note at the same time;
+    a note this chat never wrote or named is not this chat's handoff."""
     try:
-        for name in os.listdir(folder):
-            p = os.path.join(folder, name)
-            if name.endswith(".md") and os.path.isfile(p) and os.path.getmtime(p) > best_t:
-                best, best_t = p, os.path.getmtime(p)
+        notes = [os.path.join(folder, n) for n in os.listdir(folder) if n.endswith(".md")]
+        notes = sorted((p for p in notes if os.path.isfile(p) and os.path.getmtime(p) > since),
+                       key=os.path.getmtime, reverse=True)
+        if not notes:
+            return None
+        log = td_common._read_part(transcript_path, tail=td_common.TAIL_BYTES)
     except Exception:
         return None
-    return best
+    for p in notes:
+        name = os.path.basename(p)
+        if any(form.encode("utf-8") in log for form in (name, json.dumps(name)[1:-1])):
+            return p
+    return None
 
 
 def handoff_request(r, cfg, root):
@@ -92,49 +93,56 @@ def handoff_request(r, cfg, root):
 
 
 def build(data):
+    """What to send back to Claude Code, as a dict, or None to stay silent."""
+    event = data.get("hook_event_name") or "UserPromptSubmit"
+    if data.get("agent_id"):
+        return None                      # a helper agent's own events: the bar is the main chat's
     sid = data.get("session_id") or "default"
     cwd = data.get("cwd") or os.getcwd()
     cfg = td_common.load_config(cwd)
     r = td_common.measure(data.get("transcript_path"), sid, cfg)
     if r["unreadable"]:
         flag = td_common.state_file("unreadable", sid)
-        if td_common.read_json(flag) is None:
-            td_common.write_json(flag, {"told": True})
-            return UNREADABLE
-        return ""
+        if event != "Stop" or td_common.read_json(flag) is not None:
+            return None
+        td_common.write_json(flag, {"told": True})
+        return {"systemMessage": PAUSED}
     if not r["measured"]:
-        return ""
-    bar = td_common.bar_line(r["pct"], cfg)
-    out = [BAR % bar]
-    if r["pct"] >= int(cfg["fresh_chat_pct"]):
-        root = td_common.project_root(cwd)
-        flag = td_common.state_file("handoff", sid)
-        asked = td_common.read_json(flag) or {}
+        r = dict(r, pct=0)               # no chat log yet: a brand-new chat weighs 0%
+    root = td_common.project_root(cwd)
+    flag = td_common.state_file("handoff", sid)
+    asked = td_common.read_json(flag) or {}
+    past_line = r["pct"] >= int(cfg["fresh_chat_pct"])
+    if past_line and not asked.get("at") and not data.get("stop_hook_active"):
+        td_common.write_json(flag, {"at": datetime.now().timestamp() - 1})
+        text = handoff_request(r, cfg, root)
+        if event == "Stop":              # the reply is finished: write the handoff now
+            return {"decision": "block", "reason": text}
+        return context(event, text)
+    if event == "Stop":
+        lines = [td_common.bar_line(r["pct"], cfg).replace("***", "")]
+        lines += update_line(cfg, sid)
+        return {"systemMessage": "\n".join(lines)}
+    if event == "UserPromptSubmit" and asked.get("at") and past_line:
         folder = td_common.in_project(root, cfg["handoff_folder"])
-        note = asked.get("at") and newest_note_since(folder, asked["at"])
-        if note:
-            out.append("[chat-weight] The handoff note is written: %s. If the user carries on "
-                       "here, help them, but remind them in one line that a fresh chat "
-                       "with the paste block is cheaper." % note)
-        elif asked.get("at"):
-            out.append(NUDGE % (r["pct"], RULES))
-        else:
-            td_common.write_json(flag, {"at": datetime.now().timestamp() - 1})
-            out = [BAR_ABOVE_PASTE % bar, handoff_request(r, cfg, root)]
-    if len(out) == 1:
-        out += update_line(cfg, sid)
-    return "\n\n".join(out)
+        note = note_from_this_chat(folder, asked["at"], data.get("transcript_path"))
+        return context(event, WRITTEN % note if note else NUDGE % (r["pct"], RULES))
+    return None
+
+
+def context(event, text):
+    return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}
 
 
 def update_line(cfg, sid):
-    """The update notice, once per chat. Never alongside a handoff request or reminder."""
+    """The update notice, once per chat, under the bar."""
     try:
         found = updates.notice(cfg)
         flag = td_common.state_file("update", sid)
         if not found or td_common.read_json(flag) is not None:
             return []
         td_common.write_json(flag, {"told": found[1]})
-        return [UPDATE % (found[1], found[0])]
+        return [UPDATE % found[1]]
     except Exception:
         return []
 
@@ -142,12 +150,10 @@ def update_line(cfg, sid):
 def main():
     try:
         raw = sys.stdin.buffer.read().decode("utf-8", "replace")
-        text = build(json.loads(raw or "{}"))
+        payload = build(json.loads(raw or "{}"))
     except Exception:
         return 0
-    if text:
-        payload = {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                                          "additionalContext": text}}
+    if payload:
         sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
     return 0
 

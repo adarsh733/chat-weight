@@ -28,7 +28,8 @@ shows, with `≈` because it is counted, not measured:
 Code chats, a fresh chat became the cheaper choice (4 × a 30,000-token restart; see `config.json`).
 
 Each reply: **read the number in your previous bar, add what this turn cost, print the new
-total.** The first reply starts from 0. The number only ever goes up. Do not re-guess the
+total.** Work out the bar last, after the rest of the reply is written, so it counts this
+reply too. The first reply of a new chat starts from 0. The number only ever goes up. Do not re-guess the
 whole chat each time — the tally is what keeps the bar steady.
 
 What a turn costs — add every line that applies:
@@ -93,11 +94,16 @@ on the user's computer, so:
 | "write a handoff", "new chat" | Write the handoff above now, at any weight |
 | "how heavy is this chat" | Point at the bar; say in one line it is a count, not a measurement |
 | "where did my tokens go", "why did I hit my limit" | The usage report reads Claude Code's own logs, so it only works in Claude Code. Explain in plain words what usually costs most here: long chats, big pasted files and documents, web searches, many long replies. |
-| "update chat-weight" | Updates in chats are manual: download the new version, then upload it again where skills are added in the app's settings, replacing the old one. |
+| "update chat-weight" | Updates in chats are manual: download `chat-weight.zip` again from the chat-weight GitHub page, then in Customize → Skills delete the old chat-weight (its "..." menu) and upload the new zip. Then: open a new chat to use the new version. |
+| "which version is this" | Read the `VERSION` file in this skill's folder and say the number. The newest is on the chat-weight GitHub page, under Releases. |
 | "hand off later / sooner" | There is no settings file here. Use the new point for the rest of this chat, and say it lasts only for this chat. |
 
-## If you are not sure which mode you are in
+## Which kind of chat is this
 
-Look for proof of Claude Code: a `[chat-weight]` line arriving with the user's message, or tools
-that run commands on the user's own computer. Either one → you are in Claude Code; follow
-`SKILL.md`. Neither → you are in a normal chat; follow this file.
+You are in Claude Code only if your own instructions say you are Claude Code, or a `[chat-weight]`
+line arrived in this chat. Then follow `SKILL.md`. Anything else is a normal chat:
+follow this file.
+
+Tools prove nothing. A normal chat can have tools too (a sandbox that runs code, connectors,
+desktop extensions that read the user's files), so never decide from tools. Never tell someone in
+a normal chat to run `install.py`: that is for Claude Code only. Unsure? It is a normal chat.

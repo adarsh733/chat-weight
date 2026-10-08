@@ -56,7 +56,10 @@ class TestInstallSafety(unittest.TestCase):
         self.assertEqual(data["statusLine"].get("type"), "command")
         self.assertIn("statusline.py", data["statusLine"].get("command", ""))
         self.assertIn("on_prompt.py", json.dumps(data["hooks"]["UserPromptSubmit"]))
-        self.assertEqual(sorted(data["hooks"]), ["UserPromptSubmit"])
+        self.assertEqual(sorted(data["hooks"]), ["PostToolUse", "Stop", "UserPromptSubmit"])
+        self.assertIn("on_prompt.py", json.dumps(data["hooks"]["Stop"]))
+        self.assertIn("on_prompt.py", json.dumps(data["hooks"]["PostToolUse"]))
+        self.assertEqual(data["hooks"]["PostToolUse"][0]["matcher"], "*")
 
     def test_2_unrelated_keys_survive_intact(self):
         """2. settings.json with unrelated keys -> every one survives with identical values."""
@@ -142,7 +145,7 @@ class TestInstallSafety(unittest.TestCase):
 
         blob = json.dumps(data)
         self.assertEqual(blob.count("statusline.py"), 1)
-        self.assertEqual(blob.count("on_prompt.py"), 1)
+        self.assertEqual(blob.count("on_prompt.py"), 3)     # one per moment: reply, step, message
 
     def test_6_uninstall_restores_pre_install_state(self):
         """6. --uninstall -> returns file to its pre-install state."""
@@ -245,7 +248,7 @@ class TestInstallSafety(unittest.TestCase):
         blob = json.dumps(data["hooks"])
         self.assertIn("/opt/other/on_prompt.py", blob)
         self.assertNotIn(old, blob)
-        self.assertEqual(blob.count("on_prompt.py"), 2)
+        self.assertEqual(blob.count("on_prompt.py"), 4)      # the other tool's + ours at three moments
 
     def test_9_a_working_status_line_is_kept_unless_asked(self):
         """9. Someone's working status line stays; --statusline takes over; uninstall gives it back."""
@@ -260,7 +263,7 @@ class TestInstallSafety(unittest.TestCase):
             data = json.load(fh)
         self.assertEqual(data["statusLine"], theirs)
         self.assertNotIn("_chatWeightPreviousStatusLine", data)
-        self.assertEqual(json.dumps(data["hooks"]).count("on_prompt.py"), 1)
+        self.assertEqual(json.dumps(data["hooks"]).count("on_prompt.py"), 3)
 
         self.assertEqual(self._run_installer("--statusline").returncode, 0)
         with open(self.settings_path, encoding="utf-8") as fh:

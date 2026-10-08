@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Installer for chat-weight.
 
-Adds two things to ~/.claude/settings.json: the status line and one hook that runs
-when you send a message. Backs the file up first, touches nothing else, checks the
-result and puts the backup back if anything is wrong.
+Adds two things to ~/.claude/settings.json: the status line, and one small script that
+runs when Claude finishes a reply, after each step it takes, and when you send a message.
+Backs the file up first, touches nothing else, checks the result and puts the backup back
+if anything is wrong.
 
     python install.py             install (or upgrade)
     python install.py --dry-run   show the change, write nothing
@@ -20,6 +21,7 @@ import shutil
 import sys
 
 ROOT = os.path.normpath(os.path.dirname(os.path.abspath(__file__)))
+PY = "python" if os.name == "nt" else "python3"     # what to tell the user to type
 
 
 def get_settings_path():
@@ -267,7 +269,7 @@ def strip_ours(data):
 def apply_install(data, python_bin, statusline_script, prompt_script, take_statusline=False,
                   exec_form=True):
     # 1. statusLine. A working one that belongs to someone else stays, unless the user
-    #    asks for ours (--statusline); the bar still shows at the end of every reply.
+    #    asks for ours (--statusline); the bar still shows under every reply.
     statusline_cmd = command_line(python_bin, statusline_script)
     existing = data.get("statusLine")
     theirs_works = isinstance(existing, dict) and bool(existing.get("command")) \
@@ -277,8 +279,8 @@ def apply_install(data, python_bin, statusline_script, prompt_script, take_statu
         existing["command"] = statusline_cmd
     elif theirs_works and not take_statusline:
         print("You already have a status line, so it stays as it is. The chat-weight bar")
-        print("still shows at the end of every reply. To show it in the status line instead,")
-        print("run: python install.py --statusline")
+        print("still shows under every reply. To show it in the status line instead,")
+        print("run: %s install.py --statusline" % PY)
     else:
         if existing is not None:
             print("Saved your old status line under '_chatWeightPreviousStatusLine'; "
@@ -286,12 +288,17 @@ def apply_install(data, python_bin, statusline_script, prompt_script, take_statu
             data[KEY] = existing
         data["statusLine"] = {"type": "command", "command": statusline_cmd}
 
-    # 2. one hook, on every message the user sends
+    # 2. one script, at three moments: when Claude finishes a reply (the bar, measured after
+    #    the work), after each step during a long run (the handoff, if the line is crossed),
+    #    and when the user sends a message (handoff reminders)
     strip_ours(data)
     if not isinstance(data.get("hooks"), dict):
         data["hooks"] = {}
-    ups = data["hooks"].setdefault("UserPromptSubmit", [])
-    ups.append({"hooks": [hook_entry(python_bin, prompt_script, exec_form)]})
+    for event, matcher in (("Stop", None), ("PostToolUse", "*"), ("UserPromptSubmit", None)):
+        item = {"hooks": [hook_entry(python_bin, prompt_script, exec_form)]}
+        if matcher:
+            item = dict({"matcher": matcher}, **item)
+        data["hooks"].setdefault(event, []).append(item)
 
 
 def apply_uninstall(data):
@@ -332,7 +339,7 @@ def main():
         if problem:
             print("Stopped before changing anything: chat-weight's scripts did not run.")
             print("Details: " + problem)
-            print("Nothing was changed. Try running install.py with another Python 3.8+.")
+            print("Nothing was changed. Try running install.py with another Python 3.8 or newer.")
             sys.exit(1)
         apply_install(working_data, python_bin, statusline_script, prompt_script,
                       args.statusline, claude_runs_exec_form())
@@ -371,11 +378,16 @@ def main():
 
     if args.uninstall:
         print("Uninstall complete. chat-weight has been removed from your settings.")
+        print("Chats that are already open may keep showing the bar until you start a new one.")
         print(f"Updated configuration in: {settings_path}")
     else:
-        print("Setup complete. Start a new Claude Code chat and the chat-weight bar appears at the")
-        print("end of each reply. At 60% weight, Claude writes a handoff note and gives you three")
-        print("lines to paste into a fresh chat.")
+        print("Setup complete.")
+        print("")
+        print("  >>> OPEN A NEW CHAT TO SEE THE BAR. <<<")
+        print("")
+        print("Chats that are already open, including the one you ran this from, may not show")
+        print("it. In the new chat the bar appears under each reply, and at 60% weight")
+        print("Claude writes a handoff note and gives you three lines to paste into a fresh chat.")
         print(f"Updated configuration in: {settings_path}")
 
 

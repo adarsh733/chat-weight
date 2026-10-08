@@ -9,7 +9,7 @@
   "memory_cap_pct": 70,
   "_statusline_empty_why": "The empty square in the terminal's bottom bar. Many terminal fonts draw ⬜ small and hollow; 🔳 always comes from the emoji font, so it matches the coloured squares. Set it back to ⬜ if your terminal draws that one well.",
   "statusline_empty": "🔳",
-  "_updates_why": "Once a day chat-weight downloads one small public file (VERSION) from its GitHub page, in the background, to see if a newer version is out. If one is, Claude says so once per chat; nothing updates until you say \"update chat-weight\". Nothing about you is sent. Set check_for_updates to false to stop the check.",
+  "_updates_why": "Once a day chat-weight downloads one small public file (VERSION) from its GitHub page, in the background, to see if a newer version is out. If one is, Claude says so once per chat; nothing updates until you say \"update chat-weight\". Nothing about you is sent: it is a plain download, like opening a web page. Set check_for_updates to false to stop the check.",
   "check_for_updates": true,
   "update_url": "https://raw.githubusercontent.com/adarsh733/chat-weight/main/VERSION",
   "handoff_folder": ".claude/handoffs",

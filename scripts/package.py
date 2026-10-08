@@ -38,7 +38,8 @@ def main():
             return 1
     os.replace(tmp, out)
     print("Made %s (%d files)." % (out, count))
-    print("Upload it where skills are added in the Claude app's settings.")
+    print("Upload it in Claude: Customize -> Skills -> + -> Create skill -> Upload a skill.")
+    print("Code execution must be on (Settings -> Capabilities). It works from the next new chat.")
     return 0
 
 

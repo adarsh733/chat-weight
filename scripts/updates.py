@@ -7,7 +7,8 @@ project's GitHub page and writes the answer to ~/.claude/chat-weight/state/updat
 The hook reads that answer and, when a newer version exists, asks Claude to mention
 it once per chat. The user then says "update chat-weight" and Claude runs --apply.
 
-Nothing about the user is sent: it is a plain download of a public file.
+Nothing about the user is sent: it is a plain download of one public file, like
+opening a web page (GitHub sees an ordinary visit, as with any website).
 Updating only on the user's say-so is deliberate: if the GitHub account were ever
 taken over, silent updates would put bad code on every machine unnoticed.
 
@@ -140,7 +141,8 @@ def apply():
     st = td_common.read_json(state_path()) or {}
     st["latest"] = installed()
     td_common.write_json(state_path(), st)
-    print("chat-weight updated: %s -> %s. Open a new chat to use it." % (before or "?", installed() or "?"))
+    print("chat-weight updated: %s -> %s. Open a new chat to use the new version."
+          % (before or "?", installed() or "?"))
     return 0
 
 
