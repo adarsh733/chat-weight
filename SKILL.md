@@ -26,7 +26,9 @@ are unsure, it is a normal chat.
 - **The bar comes from the hook.** Each time the user sends a message, a `[chat-weight]`
   line hands you the bar, measured at that moment:
   `🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜  🟢 chat weight 24% — fresh chat at 60% — all good`.
-  End your reply with that exact line and never comment on it. Never make up a bar or
+  End your reply with that exact line and never comment on it. In the terminal the bar
+  is already at the bottom of the screen, so no `[chat-weight]` bar line comes and the
+  reply has none. Never make up a bar or
   change its number: no `[chat-weight]` line, no bar. Weight is growth since the chat
   began, against the point where a fresh chat becomes cheaper (4× what a fresh chat must
   re-load). It is not memory. A new chat reads 0% until it has grown.

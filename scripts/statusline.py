@@ -27,6 +27,7 @@ def main():
     try:
         payload = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace") or "{}")
         sid = payload.get("session_id")
+        td_common.mark_bottom_bar(sid)       # this screen has the bar: replies can leave it out
         td_common.remember_window(sid, (payload.get("context_window") or {}).get("context_window_size"))
         cfg = td_common.load_config((payload.get("workspace") or {}).get("project_dir") or payload.get("cwd"))
         r = td_common.measure(payload.get("transcript_path"), sid, cfg)

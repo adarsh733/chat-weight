@@ -25,8 +25,8 @@ starting fresh becomes cheaper. It is measured each time you send a message, and
 ends its reply with it, so the bar sits inside the reply (a few tokens per reply). A new
 chat reads 0% until it has grown. It is not how full the model's memory is: today's big
 models can hold a million tokens, and a chat gets expensive long before it fills that.
-The terminal also shows the bar at the bottom of the screen, which is free because it
-never reaches the AI.
+The terminal shows the bar at the bottom of the screen instead, which is free because it
+never reaches the AI, so there the replies leave it out.
 
 **2. An automatic handoff at 60%**
 
@@ -76,8 +76,9 @@ One skill, and Claude works out on its own where it is running.
 
 **Claude Code** — terminal and desktop app, using the same install:
 
-- **Terminal (`claude`):** the bar shows once under every reply, and in the status line at
-  the bottom of the screen.
+- **Terminal (`claude`):** the bar shows in the status line at the bottom of the screen,
+  live. Replies leave it out, so you never see it twice. Want it in the replies too? Set
+  `"reply_bar": "always"` in your config.
 - **Claude desktop app (Code tab), and any other window with no status line:** the bar shows
   once under every reply. The handoff works the same way.
 
@@ -186,7 +187,7 @@ small script that runs when Claude finishes a reply, after each step it takes, a
 send a message. It touches nothing else. It saves a backup first,
 checks the result, and puts the backup back if anything looks wrong.
 
-If you already have a status line, it stays: the bar still shows once under every reply.
+If you already have a status line, it stays, and the bar shows once under every reply instead.
 To show chat-weight's bar there instead, run `python install.py --statusline`, and
 `--uninstall` will give yours back.
 

@@ -304,6 +304,31 @@ class TestHook(Base):
     def test_first_reply_shows_an_empty_bar(self):
         self.assertIn("chat weight 0%", self.hook(self.chat()))
 
+    def test_terminal_with_the_bottom_bar_leaves_the_bar_out_of_replies(self):
+        t = self.chat(reply(START), self.at(20))
+        self.assertIn("chat weight 20%", self.hook(t, sid="term"))     # before the status line runs
+        subprocess.run([sys.executable, STATUS], capture_output=True, env=self.env,
+                       input=json.dumps({"session_id": "term", "transcript_path": t,
+                                         "cwd": self.project}).encode("utf-8"))
+        self.assertEqual(self.hook(t, sid="term"), "")                  # bottom bar shows it
+        self.assertIn("chat weight 20%", self.hook(t, sid="app"))       # other windows keep it
+
+    def test_reply_bar_always_keeps_it_in_the_terminal_too(self):
+        os.makedirs(os.path.join(self.project, ".claude"))
+        with open(os.path.join(self.project, ".claude", "chat-weight.json"), "w") as fh:
+            json.dump({"reply_bar": "always"}, fh)
+        t = self.chat(reply(START), self.at(20))
+        td_common.mark_bottom_bar("term")
+        self.assertIn("chat weight 20%", self.hook(t, sid="term"))
+
+    def test_terminal_handoff_comes_without_the_bar(self):
+        t = self.chat(reply(START), self.at(20))
+        td_common.mark_bottom_bar("term")
+        self.grow(t, 62)
+        text = self.hook(t, sid="term")
+        self.assertIn("HANDOFF", text)
+        self.assertNotIn("chat weight 62%", text)
+
     def test_a_chat_with_no_log_yet_still_shows_the_bar(self):
         self.assertIn("chat weight 0%", self.hook(os.path.join(self.tmp, "not-written-yet.jsonl")))
 

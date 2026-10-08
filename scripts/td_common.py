@@ -228,6 +228,17 @@ def remember_window(session_id, size):
         write_json(state_file("window", session_id), {"window": size})
 
 
+def mark_bottom_bar(session_id):
+    """The status line just drew the bar at the bottom of this chat's screen."""
+    write_json(state_file("bottombar", session_id), {"shown": True})
+
+
+def bottom_bar_shown(session_id):
+    """True once the status line has drawn the bar for this chat. Only the terminal draws
+    one; the desktop app and other windows never do, so they keep the bar in the reply."""
+    return read_json(state_file("bottombar", session_id)) is not None
+
+
 def window_for(cfg, session_id, model, tokens=0):
     """Real size from Claude Code if we have it, else the table, else the default.
 

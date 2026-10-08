@@ -2,8 +2,9 @@
 """chat-weight's one hook script. Claude Code runs it at three moments:
 
 - UserPromptSubmit (the user sends a message): measures the chat and asks Claude to end
-  its reply with the bar, so the bar sits inside the reply in every Claude Code window.
-  A newer chat-weight is mentioned here too, once per chat, just above the bar.
+  its reply with the bar, so the bar sits inside the reply — except where the status line
+  already draws it at the bottom of the screen (the terminal), unless reply_bar is
+  "always". A newer chat-weight is mentioned here too, once per chat, just above the bar.
 - Past 60%, asks Claude, once, for the handoff: with the message that crosses the line,
   during a long run (PostToolUse, after each of Claude's steps) as soon as the line is
   crossed, or right after a reply that crossed it (Stop). Claude finishes the step it
@@ -44,6 +45,9 @@ PINNED = ("[chat-weight] Model names: this project's handoff rules name fixed ve
 UPDATE = ("[chat-weight] Just above the bar line, add this exact line once: A chat-weight "
           "update is available (%s) — say \"update chat-weight\". Do not mention it again "
           "in later replies.")
+UPDATE_NO_BAR = ("[chat-weight] At the end of your reply, add this exact line once: A "
+                 "chat-weight update is available (%s) — say \"update chat-weight\". Do not "
+                 "mention it again in later replies.")
 PAUSED = ("[chat-weight] chat-weight could not measure this chat: this version of Claude "
           "Code writes its chat log in a way chat-weight does not recognise. At the end of "
           "your reply, tell the user in one line that the chat-weight bar is paused and that "
@@ -126,31 +130,32 @@ def build(data):
     asked = td_common.read_json(flag) or {}
     past_line = r["pct"] >= int(cfg["fresh_chat_pct"])
     bar = td_common.bar_line(r["pct"], cfg)
+    in_reply = cfg.get("reply_bar") == "always" or not td_common.bottom_bar_shown(sid)
     if past_line and not asked.get("at") and not data.get("stop_hook_active"):
         td_common.write_json(flag, {"at": datetime.now().timestamp() - 1})
         text = handoff_request(r, cfg, root)
         if event == "Stop":              # the reply is finished: write the handoff now
             return {"decision": "block", "reason": text}
-        if event == "UserPromptSubmit":
+        if event == "UserPromptSubmit" and in_reply:
             text = BAR_ABOVE_PASTE % bar + "\n\n" + text
         return context(event, text)
     if event != "UserPromptSubmit":
         return None                      # steps and the end of a reply: silent
-    out = [BAR % bar]
+    out = [BAR % bar] if in_reply else []
     if asked.get("at") and past_line:
         folder = td_common.in_project(root, cfg["handoff_folder"])
         note = note_from_this_chat(folder, asked["at"], data.get("transcript_path"))
         out.append(WRITTEN % note if note else NUDGE % (r["pct"], RULES))
     else:
-        out += update_line(cfg, sid)
-    return context(event, "\n\n".join(out))
+        out += update_line(cfg, sid, in_reply)
+    return context(event, "\n\n".join(out)) if out else None
 
 
 def context(event, text):
     return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}
 
 
-def update_line(cfg, sid):
+def update_line(cfg, sid, in_reply=True):
     """The update notice, once per chat, just above the bar. Never alongside a handoff."""
     try:
         found = updates.notice(cfg)
@@ -158,7 +163,7 @@ def update_line(cfg, sid):
         if not found or td_common.read_json(flag) is not None:
             return []
         td_common.write_json(flag, {"told": found[1]})
-        return [UPDATE % found[1]]
+        return [(UPDATE if in_reply else UPDATE_NO_BAR) % found[1]]
     except Exception:
         return []
 
